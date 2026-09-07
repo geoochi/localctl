@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { EditModal } from './EditModal'
 import { SourceModal } from './SourceModal'
 import type { Service } from '../types'
 
@@ -14,13 +15,17 @@ function Row({ k, children }: { k: string; children: React.ReactNode }) {
 export function DetailPanel({ service }: { service: Service }) {
   const agent = service.agent
   const [showSource, setShowSource] = useState(false)
+  const [editing, setEditing] = useState(false)
   return (
     <div className="detail-body">
       <div className="detail-toolbar">
         {agent && (
-          <button className="btn detail" onClick={() => setShowSource((v) => !v)}>
-            {showSource ? '隐藏源文件' : '源文件'}
-          </button>
+          <>
+            <button className="btn detail" onClick={() => setEditing(true)}>编辑</button>
+            <button className="btn detail" onClick={() => setShowSource((v) => !v)}>
+              {showSource ? '隐藏源文件' : '源文件'}
+            </button>
+          </>
         )}
       </div>
       {service.parse_error && <div className="detail-err">错误：{service.parse_error}</div>}
@@ -82,6 +87,7 @@ export function DetailPanel({ service }: { service: Service }) {
         </div>
       )}
       {showSource && <SourceModal service={service} onClose={() => setShowSource(false)} />}
+      {editing && <EditModal service={service} onClose={() => setEditing(false)} onSaved={() => { setEditing(false); window.location.reload() }} />}
       {!!service.runs && service.runs > 0 && (
         <div className="runs">
           已运行 {service.runs} 次 · 上次 PID {service.pid ?? '-'} · 上次退出码 {service.exit_code ?? '-'}

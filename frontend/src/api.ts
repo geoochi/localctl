@@ -60,6 +60,13 @@ export async function fetchSource(label: string, path: string): Promise<PlistSou
   return { label, path, content: await res.text() }
 }
 
+export function saveSource(label: string, path: string, content: string) {
+  return request<{ service: Service }>(
+    `/api/services/${encodeURIComponent(label)}/source?path=${encodeURIComponent(path)}`,
+    { method: 'POST', body: JSON.stringify({ content }) },
+  )
+}
+
 export function createPlist(req: CreatePlistRequest) {
   return request<{ service: Service }>('/api/plist', {
     method: 'POST',

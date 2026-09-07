@@ -271,6 +271,56 @@ func (s *Server) handleSource(w http.ResponseWriter, r *http.Request) {
 	w.Write(content)
 }
 
+// handleSourceSave overwrites an agent's plist with the submitted content,
+// then reloads the service if it was loaded so changes take effect.
+func (s *Server) handleSourceSave(w http.ResponseWriter, r *http.Request) {
+	cleaned, err := resolveAgentPath(r.URL.Query().Get("path"))
+	if err != nil {
+		writeJSONError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	var req struct {
+		Content string `json:"content"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSONError(w, http.StatusBadRequest, "请求体必须是 JSON")
+		return
+	}
+
+	// 校验 XML/plist 语法，避免写坏文件
+	var check map[string]any
+	if _, err := plist.Unmarshal([]byte(req.Content), &check); err != nil {
+		writeJSONError(w, http.StatusBadRequest, "plist 格式错误: "+err.Error())
+		return
+	}
+
+	label := r.PathValue("label")
+	wasLoaded := true
+	if _, err := launchd.Print(label); err != nil {
+		wasLoaded = false
+	}
+
+	if err := os.WriteFile(cleaned, []byte(req.Content), 0o644); err != nil {
+		writeJSONError(w, http.StatusInternalServerError, "写入 plist: "+err.Error())
+		return
+	}
+
+	if wasLoaded {
+		_ = launchd.Unload(label)
+		if err := launchd.Bootstrap(cleaned); err != nil {
+			writeJSONError(w, http.StatusInternalServerError, "已保存，但重新加载失败: "+err.Error())
+			return
+		}
+	}
+
+	svc, err := launchd.GetService(label, cleaned)
+	if err != nil {
+		writeJSONError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"service": toService(svc, plistinfo.ParseAgent(cleaned))})
+}
+
 var labelRe = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]*$`)
 
 // handleCreatePlist generates a new LaunchAgent plist and bootstraps it.

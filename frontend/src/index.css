@@ -185,3 +185,28 @@ main { max-width: 960px; margin: 24px auto; padding: 0 16px; }
   white-space: pre;
   color: #1d1d1f;
 }
+
+/* ---- 编辑源文件 ---- */
+.source-textarea {
+  margin: 0;
+  padding: 14px;
+  overflow: auto;
+  font-family: ui-monospace, Menlo, monospace;
+  font-size: 12px;
+  line-height: 1.55;
+  white-space: pre;
+  color: #1d1d1f;
+  border: none;
+  outline: none;
+  resize: vertical;
+  min-height: 320px;
+  flex: 1;
+}
+.source-textarea:focus { background: #fffdf5; }
+.edit-error { padding: 8px 14px; }
+.edit-actions {
+  display: flex;
+  gap: 8px;
+  padding: 10px 14px;
+  border-top: 1px solid #e5e5ea;
+}

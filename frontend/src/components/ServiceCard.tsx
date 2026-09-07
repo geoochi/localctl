@@ -3,6 +3,7 @@ import { runAction, type ActionOp } from '../api'
 import type { Service } from '../types'
 import { StatusBadge } from './StatusBadge'
 import { DetailPanelLazy } from './DetailPanelLazy'
+import { EditModal } from './EditModal'
 
 const DANGEROUS_OPS = new Set<ActionOp>(['stop', 'disable', 'unload'])
 
@@ -14,6 +15,7 @@ const CONFIRM_MSG: Record<string, string> = {
 
 export function ServiceCard({ service, onChanged }: { service: Service; onChanged: () => void }) {
   const [showDetail, setShowDetail] = useState(false)
+  const [editing, setEditing] = useState(false)
   const [busy, setBusy] = useState(false)
   const [actionError, setActionError] = useState<string | null>(null)
 
@@ -57,6 +59,9 @@ export function ServiceCard({ service, onChanged }: { service: Service; onChange
           <button className="btn detail" onClick={() => setShowDetail((v) => !v)}>
             {showDetail ? '收起' : '详情'}
           </button>
+          {service.plist_path && (
+            <button className="btn detail" onClick={() => setEditing(true)}>编辑</button>
+          )}
           <button className="btn" disabled={busy} onClick={() => doAction('start')}>Start</button>
           <button className="btn" disabled={busy} onClick={() => doAction('restart')}>Restart</button>
           <button className="btn warn" disabled={busy} onClick={() => doAction('stop')}>Stop</button>
@@ -79,6 +84,9 @@ export function ServiceCard({ service, onChanged }: { service: Service; onChange
       </div>
       {actionError && <div className="action-error">{actionError}</div>}
       {showDetail && <DetailPanelLazy service={service} />}
+      {editing && (
+        <EditModal service={service} onClose={() => setEditing(false)} onSaved={() => void onChanged()} />
+      )}
     </div>
   )
 }
