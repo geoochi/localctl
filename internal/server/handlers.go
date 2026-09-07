@@ -293,32 +293,67 @@ func (s *Server) handleSourceSave(w http.ResponseWriter, r *http.Request) {
 		writeJSONError(w, http.StatusBadRequest, "plist 格式错误: "+err.Error())
 		return
 	}
-
-	label := r.PathValue("label")
-	wasLoaded := true
-	if _, err := launchd.Print(label); err != nil {
-		wasLoaded = false
+	newLabel, _ := check["Label"].(string)
+	if newLabel == "" {
+		writeJSONError(w, http.StatusBadRequest, "plist 缺少 Label 键")
+		return
 	}
-
-	if err := os.WriteFile(cleaned, []byte(req.Content), 0o644); err != nil {
-		writeJSONError(w, http.StatusInternalServerError, "写入 plist: "+err.Error())
+	if !labelRe.MatchString(newLabel) || len(newLabel) > 128 {
+		writeJSONError(w, http.StatusBadRequest, "Label 只能包含字母数字与 . _ - ，且以字母数字开头")
 		return
 	}
 
-	if wasLoaded {
-		_ = launchd.Unload(label)
-		if err := launchd.Bootstrap(cleaned); err != nil {
-			writeJSONError(w, http.StatusInternalServerError, "已保存，但重新加载失败: "+err.Error())
+	oldLabel := r.PathValue("label")
+	wasLoaded := true
+	if _, err := launchd.Print(oldLabel); err != nil {
+		wasLoaded = false
+	}
+
+	// Label 变化时同步改名：旧 label 的禁用状态迁移到新 label
+	renaming := newLabel != oldLabel
+	newPath := cleaned
+	if renaming {
+		newPath = filepath.Join(launchAgentsDirName(), newLabel+".plist")
+		if _, err := os.Stat(newPath); err == nil {
+			writeJSONError(w, http.StatusConflict, "目标文件已存在: "+newPath)
 			return
 		}
 	}
 
-	svc, err := launchd.GetService(label, cleaned)
+	if wasLoaded && renaming {
+		_ = launchd.Unload(oldLabel)
+	}
+
+	if err := os.WriteFile(newPath, []byte(req.Content), 0o644); err != nil {
+		writeJSONError(w, http.StatusInternalServerError, "写入 plist: "+err.Error())
+		return
+	}
+	if renaming {
+		if err := os.Remove(cleaned); err != nil {
+			writeJSONError(w, http.StatusInternalServerError, "删除旧 plist: "+err.Error())
+			return
+		}
+	}
+
+	if wasLoaded {
+		if err := launchd.Bootstrap(newPath); err != nil {
+			writeJSONError(w, http.StatusInternalServerError, "已保存，但重新加载失败: "+err.Error())
+			return
+		}
+	}
+	if renaming {
+		// print-disabled 是按 label 记录的，改名后迁移禁用状态
+		if disabled, err := launchd.DisabledMap(); err == nil && disabled[oldLabel] {
+			_ = launchd.Disable(newLabel)
+		}
+	}
+
+	svc, err := launchd.GetService(newLabel, newPath)
 	if err != nil {
 		writeJSONError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"service": toService(svc, plistinfo.ParseAgent(cleaned))})
+	writeJSON(w, http.StatusOK, map[string]any{"service": toService(svc, plistinfo.ParseAgent(newPath))})
 }
 
 var labelRe = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]*$`)
