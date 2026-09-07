@@ -1,4 +1,4 @@
-import type { Service } from './types'
+import type { CronEntry, Service } from './types'
 
 export class ApiError extends Error {}
 
@@ -31,10 +31,19 @@ export type ActionOp =
   | 'disable'
   | 'load'
   | 'unload'
+  | 'delete'
 
 export function runAction(label: string, op: ActionOp, path?: string) {
   return request<{ service: Service }>(`/api/services/${encodeURIComponent(label)}/actions`, {
     method: 'POST',
     body: JSON.stringify({ op, path }),
   })
+}
+
+export function fetchCron() {
+  return request<{ entries: CronEntry[] }>('/api/cron')
+}
+
+export function importCronEntry(index: number) {
+  return request<{ service: Service }>(`/api/cron/${index}/import`, { method: 'POST' })
 }

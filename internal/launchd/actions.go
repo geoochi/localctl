@@ -69,6 +69,9 @@ func Unload(label string) error { return action("bootout", Domain()+"/"+label) }
 // Load bootstraps a plist into the domain (registers + runs if RunAtLoad).
 func Load(plistPath, label string) error { return action("bootstrap", Domain(), plistPath) }
 
+// Bootstrap registers a plist into the user domain (same as Load, label-free).
+func Bootstrap(plistPath string) error { return action("bootstrap", Domain(), plistPath) }
+
 // GetService builds the aggregate Service view for one label.
 // plistPath is only used as a fallback when the service is not loaded.
 func GetService(label, plistPath string) (*Service, error) {

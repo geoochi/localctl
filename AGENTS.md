@@ -59,7 +59,9 @@ frontend/                   # React 19 + Vite 7 + TypeScript（pnpm）
 
 除 /api 外的所有 GET 路径由内嵌前端托管（SPA fallback 到 index.html）。
 | GET | /api/services/{label}?path= | 单服务详情（含 plist 配置 `agent`） |
-| POST | /api/services/{label}/actions | `{op, path?}` → `{service}`，op ∈ start/restart/stop/enable/disable/load/unload |
+| POST | /api/services/{label}/actions | `{op, path?}` → `{service}`，op ∈ start/restart/stop/enable/disable/load/unload/delete |
+| GET | /api/cron | 解析用户 crontab，标注每条是否可导入 launchd |
+| POST | /api/cron/{index}/import | 将一条 cron 条目导入为 LaunchAgent（写 plist → bootstrap → 从 crontab 移除原行） |
 
 无认证（仅监听 127.0.0.1，本机使用）；错误统一返回 HTTP 状态码 + `{"error": "..."}`。API 设计对 MCP 等外部客户端友好。
 
@@ -69,6 +71,8 @@ frontend/                   # React 19 + Vite 7 + TypeScript（pnpm）
 - 列表来源：**只显示 `~/Library/LaunchAgents` 下有 plist 文件的 agent**（plist 视角，有意排除 `launchctl list` 里的 com.apple.* 噪音）。
 - 单个服务状态：先 `launchctl print gui/$UID/<label>` 拿运行时信息；失败则回退 `launchctl print-disabled` 判断 enabled。
 - 操作后除返回刷新的 service JSON 外，前端还会立即触发一次列表刷新。
+- Delete（op=delete）：bootout 后删除 plist 文件，仅允许 `~/Library/LaunchAgents` 下的路径（后端强校验），前端二次确认。
+- Cron 导入（internal/cron）：数字/区间/步进/逗号列表展开为 StartCalendarInterval；`*/n * * * *` 用 StartInterval n*60 近似（有漂移）；日+星期同时受限不可导入（cron 或语义 vs launchd 且语义）；导入时同步从 crontab 移除原行避免双重执行。
 
 ## launchctl 本机已知行为（重要）
 

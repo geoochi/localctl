@@ -18,6 +18,9 @@ export function ServiceCard({ service, onChanged }: { service: Service; onChange
   const [actionError, setActionError] = useState<string | null>(null)
 
   async function doAction(op: ActionOp) {
+    if (op === 'delete' && !window.confirm(`删除将卸载服务并永久移除 plist 文件：\n${service.plist_path}\n\n确定删除 ${service.label}？`)) {
+      return
+    }
     if (DANGEROUS_OPS.has(op) && !window.confirm(`${CONFIRM_MSG[op]} ${service.label}？`)) {
       return
     }
@@ -65,6 +68,9 @@ export function ServiceCard({ service, onChanged }: { service: Service; onChange
             service.plist_path && (
               <button className="btn" disabled={busy} onClick={() => doAction('load')}>Load</button>
             )
+          )}
+          {service.plist_path && (
+            <button className="btn danger" disabled={busy} onClick={() => doAction('delete')}>Delete</button>
           )}
         </div>
       </div>

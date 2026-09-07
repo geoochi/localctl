@@ -2,12 +2,18 @@ package server
 
 import (
 	"encoding/json"
+	"errors"
+	"fmt"
 	"log"
 	"net/http"
+	"os"
+	"path/filepath"
 	"sort"
 	"strconv"
+	"strings"
 	"time"
 
+	"localctl/internal/cron"
 	"localctl/internal/launchd"
 	"localctl/internal/plistinfo"
 )
@@ -139,6 +145,7 @@ func (s *Server) handleServiceDetail(w http.ResponseWriter, r *http.Request) {
 var validOps = map[string]bool{
 	"start": true, "restart": true, "stop": true,
 	"enable": true, "disable": true, "load": true, "unload": true,
+	"delete": true,
 }
 
 // handleAction performs a management operation and returns the refreshed service.
@@ -156,8 +163,13 @@ func (s *Server) handleAction(w http.ResponseWriter, r *http.Request) {
 		writeJSONError(w, http.StatusBadRequest, "未知操作: "+req.Op)
 		return
 	}
-	if (req.Op == "load") != (req.Path != "") {
-		writeJSONError(w, http.StatusBadRequest, "load 需要 path，其他操作不需要")
+	needsPath := req.Op == "load" || req.Op == "delete"
+	if needsPath && req.Path == "" {
+		writeJSONError(w, http.StatusBadRequest, req.Op+" 需要 path")
+		return
+	}
+	if !needsPath && req.Path != "" {
+		writeJSONError(w, http.StatusBadRequest, req.Op+" 不需要 path")
 		return
 	}
 
@@ -177,6 +189,12 @@ func (s *Server) handleAction(w http.ResponseWriter, r *http.Request) {
 		err = launchd.Load(req.Path, label)
 	case "unload":
 		err = launchd.Unload(label)
+	case "delete":
+		err = deleteAgent(label, req.Path)
+		if err == nil {
+			writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
+			return
+		}
 	}
 	if err != nil {
 		writeJSONError(w, http.StatusInternalServerError, err.Error())
@@ -193,4 +211,93 @@ func (s *Server) handleAction(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"service": toService(svc, agent)})
+}
+
+// deleteAgent boots the service out (if loaded) and removes its plist file.
+// Only plists under ~/Library/LaunchAgents may be deleted.
+func deleteAgent(label, path string) error {
+	if path == "" {
+		return fmt.Errorf("delete 需要 path")
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return err
+	}
+	dir := filepath.Join(home, "Library", "LaunchAgents") + string(filepath.Separator)
+	if !strings.HasPrefix(filepath.Clean(path)+string(filepath.Separator), dir) {
+		return fmt.Errorf("只允许删除 ~/Library/LaunchAgents 下的 plist")
+	}
+	// bootout first; "not loaded" is fine.
+	_ = launchd.Unload(label)
+	if err := os.Remove(path); err != nil {
+		return fmt.Errorf("删除 plist: %w", err)
+	}
+	return nil
+}
+
+// handleCron lists the user's crontab entries with import feasibility.
+func (s *Server) handleCron(w http.ResponseWriter, r *http.Request) {
+	entries, err := cron.Load()
+	if err != nil {
+		writeJSONError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"entries": entries})
+}
+
+// handleCronImport converts one crontab entry into a LaunchAgent:
+// write plist → bootstrap → remove the original line from crontab.
+func (s *Server) handleCronImport(w http.ResponseWriter, r *http.Request) {
+	idx, err := strconv.Atoi(r.PathValue("index"))
+	if err != nil {
+		writeJSONError(w, http.StatusBadRequest, "无效的条目序号")
+		return
+	}
+	entries, err := cron.Load()
+	if err != nil {
+		writeJSONError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	var entry *cron.Entry
+	for _, e := range entries {
+		if e.Index == idx {
+			entry = e
+			break
+		}
+	}
+	if entry == nil {
+		writeJSONError(w, http.StatusNotFound, "条目不存在（crontab 可能已变化）")
+		return
+	}
+	if entry.Imported {
+		writeJSONError(w, http.StatusConflict, "该条目已导入过")
+		return
+	}
+
+	cronPath := os.Getenv("PATH") // cron 默认 PATH 很短，继承当前 PATH 更接近用户预期
+	if err := entry.Import(cronPath); err != nil {
+		if errors.Is(err, os.ErrExist) {
+			writeJSONError(w, http.StatusConflict, "同名 plist 已存在")
+			return
+		}
+		writeJSONError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	if err := launchd.Bootstrap(cron.PlistPath(entry.Label)); err != nil {
+		os.Remove(cron.PlistPath(entry.Label)) // roll back the file
+		writeJSONError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	if err := cron.RemoveLine(entry); err != nil {
+		// plist 已生效但 crontab 清理失败：如实报告，用户可手动处理
+		writeJSONError(w, http.StatusMultiStatus, "已导入，但从 crontab 移除原条目失败: "+err.Error())
+		return
+	}
+
+	svc, err := launchd.GetService(entry.Label, cron.PlistPath(entry.Label))
+	if err != nil {
+		writeJSONError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"service": toService(svc, plistinfo.ParseAgent(cron.PlistPath(entry.Label)))})
 }

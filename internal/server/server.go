@@ -50,6 +50,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/services", s.handleServices)
 	mux.HandleFunc("GET /api/services/{label}", s.handleServiceDetail)
 	mux.HandleFunc("POST /api/services/{label}/actions", s.handleAction)
+	mux.HandleFunc("GET /api/cron", s.handleCron)
+	mux.HandleFunc("POST /api/cron/{index}/import", s.handleCronImport)
 
 	mux.Handle("/", s.frontendHandler())
 

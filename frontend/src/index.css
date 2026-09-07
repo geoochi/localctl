@@ -67,6 +67,8 @@ main { max-width: 960px; margin: 24px auto; padding: 0 16px; }
 .btn:disabled { opacity: 0.5; cursor: not-allowed; }
 .btn.warn { color: #b25000; border-color: #e6b088; }
 .btn.warn:hover:not(:disabled) { background: #fdf3ea; }
+.btn.danger { color: #c0392b; border-color: #e5a3a3; }
+.btn.danger:hover:not(:disabled) { background: #fdeaea; }
 
 /* ---- 徽章 ---- */
 .badge { font-size: 11px; padding: 2px 8px; border-radius: 999px; font-weight: 500; }
@@ -108,3 +110,9 @@ main { max-width: 960px; margin: 24px auto; padding: 0 16px; }
   border-radius: 4px;
 }
 .runs { margin-top: 8px; color: #86868b; font-size: 12px; }
+
+/* ---- Cron 导入面板 ---- */
+.cron-panel { margin-top: 28px; }
+.cron-panel h2 { font-size: 15px; margin: 0 0 8px; }
+.cron-row { padding: 10px 14px; }
+.cron-reason { font-size: 11px; color: #86868b; }

@@ -1,3 +1,4 @@
+import { CronPanel } from '../components/CronPanel'
 import { ServiceCard } from '../components/ServiceCard'
 import { useServices } from '../hooks/useServices'
 
@@ -17,6 +18,7 @@ export function Dashboard() {
         {error && <div className="detail-err">加载失败：{error}</div>}
         {!services && !error && <div className="hint">加载中…</div>}
         {services?.map((s) => <ServiceCard key={s.label} service={s} onChanged={() => void refresh()} />)}
+        <CronPanel onChanged={() => void refresh()} />
       </main>
     </>
   )

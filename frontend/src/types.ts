@@ -39,3 +39,15 @@ export interface Service {
   runs?: number
   agent?: Agent
 }
+
+export interface CronEntry {
+  index: number
+  raw: string
+  schedule: string
+  command: string
+  importable: boolean
+  approximate?: boolean
+  reason?: string
+  label: string
+  imported: boolean
+}
