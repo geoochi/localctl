@@ -22,6 +22,7 @@ export interface Agent {
   environment?: [string, string][]
   low_priority_io?: boolean
   process_type?: string
+  run_description?: string
   parse_error?: string
 }
 
@@ -50,4 +51,26 @@ export interface CronEntry {
   reason?: string
   label: string
   imported: boolean
+}
+
+export type PlistCreateType = 'runatload' | 'interval' | 'calendar'
+
+export interface CreatePlistRequest {
+  label: string
+  command: string
+  type: PlistCreateType
+  interval_seconds?: number
+  hour?: number
+  minute?: number
+  weekdays?: number[]
+  keep_alive?: boolean
+  working_dir?: string
+  std_out_path?: string
+  std_err_path?: string
+}
+
+export interface PlistSource {
+  label: string
+  path: string
+  content: string
 }

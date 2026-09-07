@@ -1,3 +1,5 @@
+import { useEffect, useState } from 'react'
+import { fetchSource } from '../api'
 import type { Service } from '../types'
 
 function Row({ k, children }: { k: string; children: React.ReactNode }) {
@@ -9,13 +11,58 @@ function Row({ k, children }: { k: string; children: React.ReactNode }) {
   )
 }
 
+function SourceView({ service }: { service: Service }) {
+  const [content, setContent] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!service.plist_path) return
+    let cancelled = false
+    fetchSource(service.label, service.plist_path)
+      .then((d) => {
+        if (!cancelled) setContent(d.content)
+      })
+      .catch((e) => {
+        if (!cancelled) setError(e instanceof Error ? e.message : String(e))
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [service.label, service.plist_path])
+
+  if (error) return <div className="detail-err">读取源文件失败：{error}</div>
+  if (content === null) return <div className="hint">加载中…</div>
+  return (
+    <div>
+      <pre className="source-view">{content}</pre>
+      {service.plist_path && (
+        <a
+          className="download-link"
+          href={`/api/services/${encodeURIComponent(service.label)}/source?path=${encodeURIComponent(service.plist_path)}&download=1`}
+        >
+          下载 {service.file_name ?? 'plist'}
+        </a>
+      )}
+    </div>
+  )
+}
+
 export function DetailPanel({ service }: { service: Service }) {
   const agent = service.agent
+  const [showSource, setShowSource] = useState(false)
   return (
     <div className="detail-body">
+      <div className="detail-toolbar">
+        {agent && (
+          <button className="btn detail" onClick={() => setShowSource((v) => !v)}>
+            {showSource ? '隐藏源文件' : '源文件'}
+          </button>
+        )}
+      </div>
       {service.parse_error && <div className="detail-err">错误：{service.parse_error}</div>}
       {agent ? (
         <table className="kv">
+          <Row k="运行方式"><strong>{agent.run_description || '仅手动启动'}</strong></Row>
           <Row k="plist 文件"><code>{agent.path}</code></Row>
           {agent.program && <Row k="Program"><code>{agent.program}</code></Row>}
           {agent.program_arguments && agent.program_arguments.length > 0 && (
@@ -70,6 +117,7 @@ export function DetailPanel({ service }: { service: Service }) {
           该服务可能由其它目录加载或已在 launchd 中注销。
         </div>
       )}
+      {showSource && agent && <SourceView service={service} />}
       {!!service.runs && service.runs > 0 && (
         <div className="runs">
           已运行 {service.runs} 次 · 上次 PID {service.pid ?? '-'} · 上次退出码 {service.exit_code ?? '-'}

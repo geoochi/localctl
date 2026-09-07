@@ -58,8 +58,10 @@ frontend/                   # React 19 + Vite 7 + TypeScript（pnpm）
 | GET | /api/services | 服务列表（前端每 5 秒轮询） |
 
 除 /api 外的所有 GET 路径由内嵌前端托管（SPA fallback 到 index.html）。
-| GET | /api/services/{label}?path= | 单服务详情（含 plist 配置 `agent`） |
+| GET | /api/services/{label}?path= | 单服务详情（含 plist 配置 `agent`，`agent.run_description` 为运行方式中文摘要） |
+| GET | /api/services/{label}/source?path=&download= | plist 原始 XML 内容（download=1 时作为附件下载） |
 | POST | /api/services/{label}/actions | `{op, path?}` → `{service}`，op ∈ start/restart/stop/enable/disable/load/unload/delete |
+| POST | /api/plist | 新建 LaunchAgent：`{label, command(shell), type: runatload/interval/calendar, interval_seconds?/hour?+minute?+weekdays?, keep_alive?, working_dir?/std_out_path?/std_err_path?}` → 201 `{service}` |
 | GET | /api/cron | 解析用户 crontab，标注每条是否可导入 launchd |
 | POST | /api/cron/{index}/import | 将一条 cron 条目导入为 LaunchAgent（写 plist → bootstrap → 从 crontab 移除原行） |
 

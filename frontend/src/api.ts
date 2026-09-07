@@ -1,4 +1,4 @@
-import type { CronEntry, Service } from './types'
+import type { CreatePlistRequest, CronEntry, PlistSource, Service } from './types'
 
 export class ApiError extends Error {}
 
@@ -46,4 +46,17 @@ export function fetchCron() {
 
 export function importCronEntry(index: number) {
   return request<{ service: Service }>(`/api/cron/${index}/import`, { method: 'POST' })
+}
+
+export function fetchSource(label: string, path: string) {
+  return request<PlistSource>(
+    `/api/services/${encodeURIComponent(label)}/source?path=${encodeURIComponent(path)}`,
+  )
+}
+
+export function createPlist(req: CreatePlistRequest) {
+  return request<{ service: Service }>('/api/plist', {
+    method: 'POST',
+    body: JSON.stringify(req),
+  })
 }

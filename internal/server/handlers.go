@@ -8,10 +8,13 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
 	"time"
+
+	"howett.net/plist"
 
 	"localctl/internal/cron"
 	"localctl/internal/launchd"
@@ -213,26 +216,187 @@ func (s *Server) handleAction(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"service": toService(svc, agent)})
 }
 
-// deleteAgent boots the service out (if loaded) and removes its plist file.
-// Only plists under ~/Library/LaunchAgents may be deleted.
-func deleteAgent(label, path string) error {
+// resolveAgentPath validates that path points at a plist inside
+// ~/Library/LaunchAgents and returns the cleaned path.
+func resolveAgentPath(path string) (string, error) {
 	if path == "" {
-		return fmt.Errorf("delete 需要 path")
+		return "", fmt.Errorf("需要 path")
 	}
 	home, err := os.UserHomeDir()
 	if err != nil {
-		return err
+		return "", err
 	}
 	dir := filepath.Join(home, "Library", "LaunchAgents") + string(filepath.Separator)
-	if !strings.HasPrefix(filepath.Clean(path)+string(filepath.Separator), dir) {
-		return fmt.Errorf("只允许删除 ~/Library/LaunchAgents 下的 plist")
+	cleaned := filepath.Clean(path)
+	if cleaned == filepath.Dir(dir) || !strings.HasPrefix(cleaned+string(filepath.Separator), dir) {
+		return "", fmt.Errorf("只允许操作 ~/Library/LaunchAgents 下的 plist")
+	}
+	if !strings.HasSuffix(strings.ToLower(cleaned), ".plist") {
+		return "", fmt.Errorf("只允许操作 plist 文件")
+	}
+	return cleaned, nil
+}
+
+// deleteAgent boots the service out (if loaded) and removes its plist file.
+func deleteAgent(label, path string) error {
+	cleaned, err := resolveAgentPath(path)
+	if err != nil {
+		return err
 	}
 	// bootout first; "not loaded" is fine.
 	_ = launchd.Unload(label)
-	if err := os.Remove(path); err != nil {
+	if err := os.Remove(cleaned); err != nil {
 		return fmt.Errorf("删除 plist: %w", err)
 	}
 	return nil
+}
+
+// handleSource returns the raw plist XML of an agent.
+func (s *Server) handleSource(w http.ResponseWriter, r *http.Request) {
+	cleaned, err := resolveAgentPath(r.URL.Query().Get("path"))
+	if err != nil {
+		writeJSONError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	content, err := os.ReadFile(cleaned)
+	if err != nil {
+		writeJSONError(w, http.StatusInternalServerError, "读取 plist: "+err.Error())
+		return
+	}
+	if r.URL.Query().Get("download") == "1" {
+		w.Header().Set("Content-Disposition",
+			fmt.Sprintf("attachment; filename=%q", filepath.Base(cleaned)))
+	}
+	w.Header().Set("Content-Type", "application/xml; charset=utf-8")
+	w.Write(content)
+}
+
+var labelRe = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]*$`)
+
+// handleCreatePlist generates a new LaunchAgent plist and bootstraps it.
+func (s *Server) handleCreatePlist(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Label       string `json:"label"`
+		Command     string `json:"command"`
+		Type        string `json:"type"` // runatload | interval | calendar
+		IntervalSec int    `json:"interval_seconds,omitempty"`
+		Hour        *int   `json:"hour,omitempty"`
+		Minute      *int   `json:"minute,omitempty"`
+		Weekdays    []int  `json:"weekdays,omitempty"` // calendar; empty = every day
+		KeepAlive   bool   `json:"keep_alive,omitempty"`
+		WorkingDir  string `json:"working_dir,omitempty"`
+		StdOutPath  string `json:"std_out_path,omitempty"`
+		StdErrPath  string `json:"std_err_path,omitempty"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSONError(w, http.StatusBadRequest, "请求体必须是 JSON")
+		return
+	}
+	if !labelRe.MatchString(req.Label) || len(req.Label) > 128 {
+		writeJSONError(w, http.StatusBadRequest, "label 只能包含字母数字与 . _ - ，且以字母数字开头")
+		return
+	}
+	if strings.TrimSpace(req.Command) == "" {
+		writeJSONError(w, http.StatusBadRequest, "命令不能为空")
+		return
+	}
+
+	dict := map[string]any{
+		"Label":            req.Label,
+		"ProgramArguments": []string{"/bin/sh", "-c", strings.TrimSpace(req.Command)},
+	}
+	switch req.Type {
+	case "runatload":
+		dict["RunAtLoad"] = true
+		if req.KeepAlive {
+			dict["KeepAlive"] = true
+		}
+	case "interval":
+		if req.IntervalSec < 5 || req.IntervalSec > 7*24*3600 {
+			writeJSONError(w, http.StatusBadRequest, "间隔需在 5 秒到 7 天之间")
+			return
+		}
+		dict["StartInterval"] = int64(req.IntervalSec)
+	case "calendar":
+		if req.Hour == nil || req.Minute == nil || *req.Hour < 0 || *req.Hour > 23 || *req.Minute < 0 || *req.Minute > 59 {
+			writeJSONError(w, http.StatusBadRequest, "时间需为有效的 HH:MM")
+			return
+		}
+		weekdays := req.Weekdays
+		if len(weekdays) == 0 {
+			weekdays = []int{-1} // no Weekday key → every day
+		}
+		var cals []map[string]int
+		for _, wd := range weekdays {
+			if wd < 0 || wd > 7 {
+				writeJSONError(w, http.StatusBadRequest, "星期需在 0-7 之间")
+				return
+			}
+			if wd == 7 {
+				wd = 0
+			}
+			cal := map[string]int{"Hour": *req.Hour, "Minute": *req.Minute}
+			if wd >= 0 {
+				cal["Weekday"] = wd
+			}
+			cals = append(cals, cal)
+		}
+		if len(cals) == 1 {
+			dict["StartCalendarInterval"] = cals[0]
+		} else {
+			dict["StartCalendarInterval"] = cals
+		}
+	default:
+		writeJSONError(w, http.StatusBadRequest, "type 需为 runatload / interval / calendar")
+		return
+	}
+	if req.WorkingDir != "" {
+		dict["WorkingDirectory"] = req.WorkingDir
+	}
+	if req.StdOutPath != "" {
+		dict["StandardOutPath"] = req.StdOutPath
+	}
+	if req.StdErrPath != "" {
+		dict["StandardErrorPath"] = req.StdErrPath
+	}
+
+	path, err := resolveAgentPath(filepath.Join(launchAgentsDirName(), req.Label+".plist"))
+	if err != nil {
+		writeJSONError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if _, err := os.Stat(path); err == nil {
+		writeJSONError(w, http.StatusConflict, "同名 plist 已存在: "+path)
+		return
+	}
+
+	data, err := plist.MarshalIndent(dict, plist.XMLFormat, "  ")
+	if err != nil {
+		writeJSONError(w, http.StatusInternalServerError, "生成 plist: "+err.Error())
+		return
+	}
+	if err := os.WriteFile(path, data, 0o644); err != nil {
+		writeJSONError(w, http.StatusInternalServerError, "写入 plist: "+err.Error())
+		return
+	}
+	if err := launchd.Bootstrap(path); err != nil {
+		os.Remove(path) // roll back
+		writeJSONError(w, http.StatusInternalServerError, "注册服务: "+err.Error())
+		return
+	}
+
+	svc, err := launchd.GetService(req.Label, path)
+	if err != nil {
+		writeJSONError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusCreated, map[string]any{"service": toService(svc, plistinfo.ParseAgent(path))})
+}
+
+// launchAgentsDirName returns the user's LaunchAgents directory.
+func launchAgentsDirName() string {
+	home, _ := os.UserHomeDir()
+	return filepath.Join(home, "Library", "LaunchAgents")
 }
 
 // handleCron lists the user's crontab entries with import feasibility.

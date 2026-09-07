@@ -48,6 +48,9 @@ export function ServiceCard({ service, onChanged }: { service: Service; onChange
             <span className="badge disabled">disabled</span>
           )}
           {service.program && <span className="program">{service.program}</span>}
+          {service.agent?.run_description && (
+            <span className="run-desc">⏱ {service.agent.run_description}</span>
+          )}
           {service.parse_error && <span className="badge failed">plist 解析失败</span>}
         </div>
         <div className="svc-actions">
