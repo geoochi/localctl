@@ -1,32 +1,31 @@
 # AGENTS.md
 
-macOS LaunchAgents 管理面板：单页面 Web UI，查看并管理 `gui/$UID` 域的 launchctl 服务。前后端分离：Go 纯 JSON API 后端 + React/Vite/TypeScript 前端（pnpm）。
+macOS LaunchAgents 管理面板：单页面 Web UI，查看并管理 `gui/$UID` 域的 launchctl 服务。Go 后端 + React/Vite/TypeScript 前端（pnpm）；前端构建产物经 go:embed 打进单个二进制，单进程部署。
 
 ## 常用命令
 
 ```bash
-# 后端
-go build ./...                    # 编译
-go vet ./...                      # 静态检查
-go build -o localctl ./cmd/localctl   # 构建可执行文件
-./localctl                        # 默认监听 127.0.0.1:7788（纯 JSON API）
+make build                        # 前端 pnpm build + Go 编译（产物 ./localctl 单二进制）
+make clean                        # 清理
+go build ./... && go vet ./...    # 仅后端编译与静态检查（需先有 frontend/dist，否则 embed 失败）
+./localctl                        # 监听 127.0.0.1:8003，同时服务页面与 /api
+./localctl -addr 127.0.0.1:9000   # 自定义端口
 
-# 前端（frontend/ 目录下）
-pnpm install                      # 安装依赖
-pnpm dev                          # Vite dev server，http://localhost:8003，/api 代理到 127.0.0.1:7788
-pnpm build                        # tsc 类型检查 + 构建产物到 dist/
+# 前端开发模式（可选，改前端时用）
+cd frontend && pnpm install && pnpm dev   # Vite :8003，/api 代理到 127.0.0.1:7788
+# 此时后端需另跑在 7788：LOCALCTL_ADDR=127.0.0.1:7788 go run ./cmd/localctl
 ```
 
-开发时需同时跑后端（go run ./cmd/localctl）与前端（pnpm dev）。前端构建产物 dist/ 独立部署，Go 不托管静态文件。
+注意：`frontend/dist` 已 gitignore 但被 go:embed 引用，clone 后必须先 `make frontend`（或 cd frontend && pnpm build）再编译 Go。
 
 ## 配置
 
 支持 `.env`（参考 `.env.example`，`.env` 已 gitignore）与 `~/.localctl/config.json`，优先级：进程环境变量 > `.env` > config.json > 首次启动自动生成随机密码。变量：
 
-- `LOCALCTL_ADDR`：监听地址（默认 127.0.0.1:7788）
+- `LOCALCTL_ADDR`：监听地址（默认 127.0.0.1:8003）
 - `LOCALCTL_PASSWORD`：登录密码（明文，启动时内存中做 bcrypt 哈希，不落盘）
 - `LOCALCTL_SECRET`：token 签名 HMAC 密钥
-- `LOCALCTL_CORS_ORIGIN`：允许的跨域来源（默认 `http://localhost:8003`，仅前后端分域部署时需要）
+- `LOCALCTL_CORS_ORIGIN`：允许的跨域来源（默认不启用；内嵌前端同源无需 CORS，仅外部 API 客户端需要时设置）
 
 `.env` 相对进程工作目录加载。
 
@@ -39,9 +38,11 @@ internal/launchd/
   actions.go                # Service 聚合模型 + Start/Stop/Restart/Enable/Disable/Load/Unload
 internal/plistinfo/parse.go # 扫描 ~/Library/LaunchAgents/*.plist，howett.net/plist 解析
 internal/server/
-  server.go                 # 路由注册、CORS 中间件
+  server.go                 # 路由注册、CORS 中间件（opt-in）、内嵌前端 SPA 托管
   auth.go                   # HMAC 签名 bearer token（Authorization: Bearer，7 天有效）
   handlers.go               # JSON handlers + Service JSON 视图模型
+frontend/
+  embed.go                  # go:embed dist（需先 pnpm build）
 internal/config/config.go   # .env 加载 + ~/.localctl/config.json + 密码校验
 frontend/                   # React 19 + Vite 7 + TypeScript（pnpm）
   src/api.ts                # fetch 客户端：token 管理、API 封装、401 统一处理
@@ -59,6 +60,8 @@ frontend/                   # React 19 + Vite 7 + TypeScript（pnpm）
 | POST | /api/auth/login | `{password}` → `{token, expires_at}` |
 | GET | /api/auth/me | 校验 token |
 | GET | /api/services | 服务列表（前端每 5 秒轮询） |
+
+除 /api 外的所有 GET 路径由内嵌前端托管（SPA fallback 到 index.html）。
 | GET | /api/services/{label}?path= | 单服务详情（含 plist 配置 `agent`） |
 | POST | /api/services/{label}/actions | `{op, path?}` → `{service}`，op ∈ start/restart/stop/enable/disable/load/unload |
 
@@ -66,7 +69,7 @@ frontend/                   # React 19 + Vite 7 + TypeScript（pnpm）
 
 ## 架构与数据流
 
-- 前端每 5 秒 fetch `GET /api/services` 拿 JSON 全量刷新；操作按钮 POST actions 后返回刷新后的 service JSON 并立即触发一次刷新；详情懒加载 `GET /api/services/{label}`。
+- 单进程：Go 在 8003 同时服务内嵌前端页面与 /api。前端每 5 秒 fetch `GET /api/services` 拿 JSON 全量刷新；操作按钮 POST actions 后返回刷新后的 service JSON 并立即触发一次刷新；详情懒加载 `GET /api/services/{label}`。
 - 列表来源：**只显示 `~/Library/LaunchAgents` 下有 plist 文件的 agent**（plist 视角，有意排除 `launchctl list` 里的 com.apple.* 噪音）。
 - 单个服务状态：先 `launchctl print gui/$UID/<label>` 拿运行时信息；失败则回退 `launchctl print-disabled` 判断 enabled。
 - 前端 401 统一处理：api.ts 清除 token 并派发 `localctl:unauthorized` 事件，App.tsx 监听后回到登录页。
@@ -80,7 +83,7 @@ frontend/                   # React 19 + Vite 7 + TypeScript（pnpm）
 
 ## 安全模型
 
-- 后端仅监听 127.0.0.1；bcrypt 密码 + HMAC 签名 bearer token（7 天），无 CSRF 面（不用 cookie）。
+- 仅监听 127.0.0.1；bcrypt 密码 + HMAC 签名 bearer token（7 天），无 CSRF 面（不用 cookie）；页面与 API 同源，默认无 CORS。
 - 密码哈希与 secret key 明文存于 `~/.localctl/config.json`（0600）或 `.env`，勿在代码或日志中输出其内容。
 
 ## 约定

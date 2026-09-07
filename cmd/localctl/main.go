@@ -12,7 +12,7 @@ import (
 )
 
 func main() {
-	addr := flag.String("addr", "127.0.0.1:7788", "listen address")
+	addr := flag.String("addr", "127.0.0.1:8003", "listen address")
 	flag.Parse()
 
 	if err := config.LoadDotEnv(".env"); err != nil {

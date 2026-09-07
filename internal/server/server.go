@@ -1,14 +1,17 @@
 package server
 
 import (
+	"io/fs"
 	"log"
 	"net/http"
 	"os"
+	"strings"
 
+	"localctl/frontend"
 	"localctl/internal/config"
 )
 
-// Server is the localctl JSON API server.
+// Server is the localctl HTTP server: JSON API + embedded frontend.
 type Server struct {
 	cfg        *config.Config
 	corsOrigin string
@@ -22,20 +25,19 @@ func New(cfg *config.Config) *Server {
 	}
 }
 
-// cors adds CORS headers for the configured origin (default Vite dev server).
+// cors adds CORS headers only when LOCALCTL_CORS_ORIGIN is explicitly set
+// (same-origin embedded frontend needs none; external API clients may opt in).
 func (s *Server) cors(next http.Handler) http.Handler {
 	origin := s.corsOrigin
 	if origin == "" {
-		origin = "http://localhost:8003"
+		return next
 	}
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if origin != "*" && origin != "" {
-			w.Header().Set("Access-Control-Allow-Origin", origin)
-			w.Header().Set("Vary", "Origin")
-			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-			w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
-			w.Header().Set("Access-Control-Max-Age", "86400")
-		}
+		w.Header().Set("Access-Control-Allow-Origin", origin)
+		w.Header().Set("Vary", "Origin")
+		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+		w.Header().Set("Access-Control-Max-Age", "86400")
 		if r.Method == http.MethodOptions {
 			w.WriteHeader(http.StatusNoContent)
 			return
@@ -44,7 +46,7 @@ func (s *Server) cors(next http.Handler) http.Handler {
 	})
 }
 
-// Handler builds the HTTP mux with all routes.
+// Handler builds the HTTP mux: /api routes plus the embedded SPA.
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 
@@ -55,11 +57,36 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/services/{label}", s.requireAuth(s.handleServiceDetail))
 	mux.HandleFunc("POST /api/services/{label}/actions", s.requireAuth(s.handleAction))
 
+	mux.Handle("/", s.frontendHandler())
+
 	return s.cors(mux)
+}
+
+// frontendHandler serves the embedded Vite dist with SPA fallback to index.html.
+func (s *Server) frontendHandler() http.Handler {
+	distRoot, err := fs.Sub(frontend.Dist, "dist")
+	if err != nil {
+		panic(err) // embed layout is fixed at build time
+	}
+	fileServer := http.FileServer(http.FS(distRoot))
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet && r.Method != http.MethodHead {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		path := strings.TrimPrefix(r.URL.Path, "/")
+		if path == "" {
+			path = "index.html"
+		}
+		if _, err := fs.Stat(distRoot, path); err != nil {
+			r.URL.Path = "/" // unknown path → SPA entry
+		}
+		fileServer.ServeHTTP(w, r)
+	})
 }
 
 // Serve runs the HTTP server (blocking).
 func (s *Server) Serve(addr string) error {
-	log.Printf("localctl API listening on http://%s", addr)
+	log.Printf("localctl listening on http://%s", addr)
 	return http.ListenAndServe(addr, s.Handler())
 }
