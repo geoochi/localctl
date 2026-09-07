@@ -20,7 +20,7 @@ cd frontend && pnpm install && pnpm dev   # Vite :8003，/api 代理到 127.0.0.
 
 ## 配置
 
-支持 `.env`（参考 `.env.example`，`.env` 已 gitignore）与 `~/.localctl/config.json`，优先级：进程环境变量 > `.env` > config.json > 首次启动自动生成随机密码。变量：
+.env 是唯一配置来源（参考 `.env.example`，`.env` 已 gitignore），优先级：进程环境变量 > `.env` > 未配置密码时本次运行随机生成并打印。`.env` 从工作目录加载，找不到时回退到可执行文件所在目录。变量：
 
 - `LOCALCTL_ADDR`：监听地址（默认 127.0.0.1:8003）
 - `LOCALCTL_PASSWORD`：登录密码（明文，启动时内存中做 bcrypt 哈希，不落盘）
@@ -84,7 +84,7 @@ frontend/                   # React 19 + Vite 7 + TypeScript（pnpm）
 ## 安全模型
 
 - 仅监听 127.0.0.1；bcrypt 密码 + HMAC 签名 bearer token（7 天），无 CSRF 面（不用 cookie）；页面与 API 同源，默认无 CORS。
-- 密码哈希与 secret key 明文存于 `~/.localctl/config.json`（0600）或 `.env`，勿在代码或日志中输出其内容。
+- 密码明文与 secret key 存于 `.env`（已 gitignore），勿在代码或日志中输出其内容；未设 `LOCALCTL_SECRET` 时 token 密钥每次重启随机生成，重启后所有登录态失效。
 
 ## 约定
 

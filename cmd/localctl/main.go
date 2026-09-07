@@ -15,7 +15,7 @@ func main() {
 	addr := flag.String("addr", "127.0.0.1:8003", "listen address")
 	flag.Parse()
 
-	if err := config.LoadDotEnv(".env"); err != nil {
+	if err := config.LoadDotEnvAnywhere(); err != nil {
 		log.Fatalf("load .env: %v", err)
 	}
 
@@ -24,7 +24,7 @@ func main() {
 		log.Fatalf("load config: %v", err)
 	}
 	if generatedPassword != "" {
-		fmt.Fprintf(os.Stderr, "\n首次启动已生成随机密码: %s\n(保存在 ~/.localctl/config.json)\n\n", generatedPassword)
+		fmt.Fprintf(os.Stderr, "\n未配置 LOCALCTL_PASSWORD，本次运行的随机密码: %s\n（建议在 .env 中固定密码与 LOCALCTL_SECRET）\n\n", generatedPassword)
 	}
 
 	srv := server.New(cfg)
