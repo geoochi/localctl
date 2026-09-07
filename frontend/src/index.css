@@ -138,17 +138,96 @@ main { max-width: 960px; margin: 24px auto; padding: 0 16px; }
 .adv-toggle { align-self: flex-start; }
 .create-actions { display: flex; gap: 8px; }
 
-/* ---- 源文件 ---- */
-.detail-toolbar { display: flex; justify-content: flex-end; margin-bottom: 6px; }
-.source-view {
-  font-family: ui-monospace, Menlo, monospace;
-  font-size: 11px;
-  background: #1d1d1f;
-  color: #f5f5f7;
-  border-radius: 8px;
-  padding: 12px;
-  max-height: 320px;
-  overflow: auto;
-  white-space: pre;
+/* ---- 源文件编辑器弹窗（VS Code 风格） ---- */
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
 }
-.download-link { display: inline-block; margin-top: 6px; font-size: 12px; color: #0071e3; }
+.editor {
+  width: min(880px, 94vw);
+  height: min(620px, 86vh);
+  background: #1e1e1e;
+  border-radius: 8px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 12px 48px rgba(0, 0, 0, 0.4);
+}
+.editor-titlebar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: #2d2d2d;
+  padding: 0 8px 0 0;
+  flex-shrink: 0;
+}
+.editor-tab {
+  background: #1e1e1e;
+  color: #e8e8e8;
+  font-size: 12px;
+  font-family: ui-monospace, Menlo, monospace;
+  padding: 8px 16px;
+  border-top: 2px solid #007acc;
+}
+.editor-actions { display: flex; gap: 6px; }
+.editor-btn {
+  background: transparent;
+  border: 1px solid #3c3c3c;
+  color: #cccccc;
+  font-size: 12px;
+  padding: 3px 10px;
+  border-radius: 4px;
+  cursor: pointer;
+  text-decoration: none;
+}
+.editor-btn:hover { background: #3c3c3c; color: #ffffff; }
+.editor-body {
+  flex: 1;
+  display: flex;
+  overflow: auto;
+  margin: 0;
+}
+.editor-gutter {
+  position: sticky;
+  left: 0;
+  background: #1e1e1e;
+  color: #6e7681;
+  padding: 12px 10px;
+  text-align: right;
+  user-select: none;
+  border-right: 1px solid #333;
+  flex-shrink: 0;
+}
+.editor-code {
+  color: #d4d4d4;
+  padding: 12px 16px;
+  white-space: pre;
+  flex: 1;
+}
+.editor-gutter, .editor-code {
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 12px;
+  line-height: 1.55;
+}
+.editor-status {
+  color: #cccccc;
+  font-size: 13px;
+  padding: 16px;
+}
+.editor-statusbar {
+  display: flex;
+  justify-content: space-between;
+  background: #007acc;
+  color: #ffffff;
+  font-size: 11px;
+  padding: 3px 12px;
+  flex-shrink: 0;
+}
+.tok-tag { color: #569cd6; }
+.tok-str { color: #ce9178; }
+.tok-comment { color: #6a9955; }

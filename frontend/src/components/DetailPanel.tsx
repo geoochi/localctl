@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react'
-import { fetchSource } from '../api'
+import { useState } from 'react'
+import { SourceModal } from './SourceModal'
 import type { Service } from '../types'
 
 function Row({ k, children }: { k: string; children: React.ReactNode }) {
@@ -8,42 +8,6 @@ function Row({ k, children }: { k: string; children: React.ReactNode }) {
       <th>{k}</th>
       <td>{children}</td>
     </tr>
-  )
-}
-
-function SourceView({ service }: { service: Service }) {
-  const [content, setContent] = useState<string | null>(null)
-  const [error, setError] = useState<string | null>(null)
-
-  useEffect(() => {
-    if (!service.plist_path) return
-    let cancelled = false
-    fetchSource(service.label, service.plist_path)
-      .then((d) => {
-        if (!cancelled) setContent(d.content)
-      })
-      .catch((e) => {
-        if (!cancelled) setError(e instanceof Error ? e.message : String(e))
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [service.label, service.plist_path])
-
-  if (error) return <div className="detail-err">读取源文件失败：{error}</div>
-  if (content === null) return <div className="hint">加载中…</div>
-  return (
-    <div>
-      <pre className="source-view">{content}</pre>
-      {service.plist_path && (
-        <a
-          className="download-link"
-          href={`/api/services/${encodeURIComponent(service.label)}/source?path=${encodeURIComponent(service.plist_path)}&download=1`}
-        >
-          下载 {service.file_name ?? 'plist'}
-        </a>
-      )}
-    </div>
   )
 }
 
@@ -117,7 +81,7 @@ export function DetailPanel({ service }: { service: Service }) {
           该服务可能由其它目录加载或已在 launchd 中注销。
         </div>
       )}
-      {showSource && agent && <SourceView service={service} />}
+      {showSource && <SourceModal service={service} onClose={() => setShowSource(false)} />}
       {!!service.runs && service.runs > 0 && (
         <div className="runs">
           已运行 {service.runs} 次 · 上次 PID {service.pid ?? '-'} · 上次退出码 {service.exit_code ?? '-'}
