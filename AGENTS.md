@@ -13,7 +13,7 @@ go build -o localctl ./cmd/localctl   # 构建可执行文件
 
 # 前端（frontend/ 目录下）
 pnpm install                      # 安装依赖
-pnpm dev                          # Vite dev server，http://localhost:5173，/api 代理到 127.0.0.1:7788
+pnpm dev                          # Vite dev server，http://localhost:8003，/api 代理到 127.0.0.1:7788
 pnpm build                        # tsc 类型检查 + 构建产物到 dist/
 ```
 
@@ -26,7 +26,7 @@ pnpm build                        # tsc 类型检查 + 构建产物到 dist/
 - `LOCALCTL_ADDR`：监听地址（默认 127.0.0.1:7788）
 - `LOCALCTL_PASSWORD`：登录密码（明文，启动时内存中做 bcrypt 哈希，不落盘）
 - `LOCALCTL_SECRET`：token 签名 HMAC 密钥
-- `LOCALCTL_CORS_ORIGIN`：允许的跨域来源（默认 `http://localhost:5173`，仅前后端分域部署时需要）
+- `LOCALCTL_CORS_ORIGIN`：允许的跨域来源（默认 `http://localhost:8003`，仅前后端分域部署时需要）
 
 `.env` 相对进程工作目录加载。
 

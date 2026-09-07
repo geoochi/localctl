@@ -26,7 +26,7 @@ func New(cfg *config.Config) *Server {
 func (s *Server) cors(next http.Handler) http.Handler {
 	origin := s.corsOrigin
 	if origin == "" {
-		origin = "http://localhost:5173"
+		origin = "http://localhost:8003"
 	}
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if origin != "*" && origin != "" {
