@@ -1,0 +1,45 @@
+{{define "service_detail"}}
+<div class="detail-body">
+  {{if .ParseError}}
+  <div class="detail-err">错误：{{.ParseError}}</div>
+  {{else if .Agent}}
+  <table class="kv">
+    <tr><th>plist 文件</th><td><code>{{.Agent.Path}}</code></td></tr>
+    {{if .Agent.Program}}<tr><th>Program</th><td><code>{{.Agent.Program}}</code></td></tr>{{end}}
+    {{if .Agent.ProgramArguments}}
+    <tr><th>ProgramArguments</th><td><code>{{range .Agent.ProgramArguments}}{{.}} {{end}}</code></td></tr>
+    {{end}}
+    {{if .Agent.WorkingDir}}<tr><th>WorkingDirectory</th><td><code>{{.Agent.WorkingDir}}</code></td></tr>{{end}}
+    {{if .Agent.RunAtLoad}}<tr><th>RunAtLoad</th><td>true — 登录时自动运行</td></tr>{{end}}
+    {{if .Agent.KeepAliveText}}<tr><th>KeepAlive</th><td>{{.Agent.KeepAliveText}}</td></tr>{{end}}
+    {{if gt .Agent.StartInterval 0}}<tr><th>StartInterval</th><td>每 {{.Agent.StartInterval}} 秒</td></tr>{{end}}
+    {{if .Agent.StartCalendar}}
+    <tr><th>StartCalendarInterval</th><td>{{range .Agent.StartCalendar}}<div>{{.}}</div>{{end}}</td></tr>
+    {{end}}
+    {{if .Agent.WatchPaths}}
+    <tr><th>WatchPaths</th><td>{{range .Agent.WatchPaths}}<div><code>{{.}}</code></div>{{end}}</td></tr>
+    {{end}}
+    {{if .Agent.QueueDirs}}
+    <tr><th>QueueDirectories</th><td>{{range .Agent.QueueDirs}}<div><code>{{.}}</code></div>{{end}}</td></tr>
+    {{end}}
+    {{if .Agent.StdOutPath}}<tr><th>StandardOutPath</th><td><code>{{.Agent.StdOutPath}}</code></td></tr>{{end}}
+    {{if .Agent.StdErrPath}}<tr><th>StandardErrorPath</th><td><code>{{.Agent.StdErrPath}}</code></td></tr>{{end}}
+    {{if .Agent.UserName}}<tr><th>UserName</th><td>{{.Agent.UserName}}</td></tr>{{end}}
+    {{if .Agent.GroupName}}<tr><th>GroupName</th><td>{{.Agent.GroupName}}</td></tr>{{end}}
+    {{if .Agent.ProcessType}}<tr><th>ProcessType</th><td>{{.Agent.ProcessType}}</td></tr>{{end}}
+    {{if .Agent.LowPriorityIO}}<tr><th>LowPriorityIO</th><td>true</td></tr>{{end}}
+    {{if .Agent.Environment}}
+    <tr><th>EnvironmentVariables</th><td>
+      {{range .Agent.Environment}}<div><code>{{index . 0}}={{index . 1}}</code></div>{{end}}
+    </td></tr>
+    {{end}}
+  </table>
+  {{else}}
+  <div class="detail-err">
+    未找到对应的 plist 文件{{if .PlistPath}}（{{.PlistPath}}）{{end}}，
+    该服务可能由其它目录加载（如 /Library/LaunchDaemons）或已在 launchd 中注销。
+  </div>
+  {{end}}
+  {{if gt .Runs 0}}<div class="runs">已运行 {{.Runs}} 次 · 上次 PID {{.PID}} · 上次退出码 {{.ExitCode}}</div>{{end}}
+</div>
+{{end}}

@@ -1,0 +1,11 @@
+# localctl build output
+/localctl
+/localctl-*
+dist/
+
+# Local secrets
+.env
+
+# Go
+*.test
+*.out

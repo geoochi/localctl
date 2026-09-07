@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>localctl — LaunchAgents 管理</title>
+  <script src="/static/htmx.min.js"></script>
+  <style>
+    * { box-sizing: border-box; }
+    body { font-family: -apple-system, "SF Pro Text", sans-serif; background: #f5f5f7; margin: 0; color: #1d1d1f; }
+    header { background: #fff; border-bottom: 1px solid #e5e5ea; padding: 14px 24px; display: flex; justify-content: space-between; align-items: center; position: sticky; top: 0; z-index: 10; }
+    header h1 { font-size: 18px; margin: 0; }
+    header .meta { font-size: 12px; color: #86868b; margin-right: 16px; }
+    a.logout { font-size: 13px; color: #0071e3; text-decoration: none; }
+    main { max-width: 960px; margin: 24px auto; padding: 0 16px; }
+    .hint { font-size: 12px; color: #86868b; margin-bottom: 12px; }
+    .svc { background: #fff; border: 1px solid #e5e5ea; border-radius: 10px; padding: 14px 18px; margin-bottom: 10px; }
+    .svc-head { display: flex; justify-content: space-between; gap: 12px; align-items: center; flex-wrap: wrap; }
+    .svc-main { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; min-width: 0; }
+    .label { font-weight: 600; font-size: 14px; word-break: break-all; }
+    .program { font-size: 12px; color: #6e6e73; font-family: ui-monospace, Menlo, monospace; word-break: break-all; }
+    .svc-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+    .btn { font-size: 12px; padding: 5px 12px; border: 1px solid #d2d2d7; background: #fff; border-radius: 999px; cursor: pointer; color: #1d1d1f; }
+    .btn:hover { background: #f5f5f7; }
+    .btn.warn { color: #b25000; border-color: #e6b088; }
+    .btn.warn:hover { background: #fdf3ea; }
+    .badge { font-size: 11px; padding: 2px 8px; border-radius: 999px; font-weight: 500; }
+    .badge.running { background: #e3f6e8; color: #1d7a3a; }
+    .badge.exited, .badge.idle { background: #eef0f3; color: #6e6e73; }
+    .badge.failed { background: #fdeaea; color: #c0392b; }
+    .badge.enabled { background: #e8f1fd; color: #1d5fa8; }
+    .badge.disabled { background: #fdf1e3; color: #b25000; }
+    .detail-panel { margin-top: 10px; }
+    .detail-body { border-top: 1px dashed #e5e5ea; padding-top: 10px; font-size: 13px; }
+    .detail-err { color: #c0392b; }
+    .kv { width: 100%; border-collapse: collapse; }
+    .kv th { text-align: right; vertical-align: top; padding: 3px 12px 3px 0; color: #6e6e73; white-space: nowrap; font-weight: 500; width: 160px; }
+    .kv td { padding: 3px 0; word-break: break-all; }
+    .kv code { font-family: ui-monospace, Menlo, monospace; font-size: 12px; background: #f5f5f7; padding: 1px 4px; border-radius: 4px; }
+    .runs { margin-top: 8px; color: #86868b; font-size: 12px; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>localctl — LaunchAgents (gui domain)</h1>
+    <div>
+      <span class="meta">每 5 秒自动刷新</span>
+      <a class="logout" href="/logout">退出</a>
+    </div>
+  </header>
+  <main>
+    <div class="hint">点击「详情」查看 plist 配置；操作按钮会直接对 launchctl 生效。</div>
+    <div id="service-list"
+         hx-get="/partials/services"
+         hx-trigger="every 5s"
+         hx-swap="innerHTML">
+      {{template "services" .}}
+    </div>
+  </main>
+</body>
+</html>

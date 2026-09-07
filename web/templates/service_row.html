@@ -1,0 +1,56 @@
+{{define "state_badge"}}
+{{if eq (string .State) "running"}}
+<span class="badge running">● running {{if ne .PID "-"}}({{.PID}}){{end}}</span>
+{{else if eq (string .State) "failed"}}
+<span class="badge failed">● exit {{.ExitCode}}</span>
+{{else if eq (string .State) "exited"}}
+<span class="badge exited">○ exited 0</span>
+{{else}}
+<span class="badge idle">○ not running</span>
+{{end}}
+{{end}}
+
+{{define "service_row"}}
+<div class="svc" id="{{.HTMLID}}">
+  <div class="svc-head">
+    <div class="svc-main">
+      <span class="label">{{.Label}}</span>
+      {{template "state_badge" .}}
+      {{if .Enabled}}
+      <span class="badge enabled">enabled</span>
+      {{else}}
+      <span class="badge disabled">disabled</span>
+      {{end}}
+      {{if .Program}}<span class="program">{{.Program}}</span>{{end}}
+      {{if .ParseError}}<span class="badge failed">plist 解析失败</span>{{end}}
+    </div>
+    <div class="svc-actions">
+      <button class="btn detail"
+              hx-get="/partials/detail?label={{urlquery .Label}}&path={{urlquery .PlistPath}}"
+              hx-target="#detail-{{.HTMLID}}"
+              hx-swap="innerHTML">详情</button>
+      <button class="btn" hx-post="/action?label={{urlquery .Label}}&path={{urlquery .PlistPath}}&op=start"
+              hx-target="#{{.HTMLID}}" hx-swap="outerHTML">Start</button>
+      <button class="btn" hx-post="/action?label={{urlquery .Label}}&path={{urlquery .PlistPath}}&op=restart"
+              hx-target="#{{.HTMLID}}" hx-swap="outerHTML">Restart</button>
+      <button class="btn warn" hx-confirm="确定停止 {{.Label}}？" hx-post="/action?label={{urlquery .Label}}&path={{urlquery .PlistPath}}&op=stop"
+              hx-target="#{{.HTMLID}}" hx-swap="outerHTML">Stop</button>
+      {{if .Enabled}}
+      <button class="btn warn" hx-confirm="禁用后即使重启也不会运行，确定禁用 {{.Label}}？" hx-post="/action?label={{urlquery .Label}}&path={{urlquery .PlistPath}}&op=disable"
+              hx-target="#{{.HTMLID}}" hx-swap="outerHTML">Disable</button>
+      {{else}}
+      <button class="btn" hx-post="/action?label={{urlquery .Label}}&path={{urlquery .PlistPath}}&op=enable"
+              hx-target="#{{.HTMLID}}" hx-swap="outerHTML">Enable</button>
+      {{end}}
+      {{if .Loaded}}
+      <button class="btn warn" hx-confirm="卸载后服务将从 launchd 注销，确定卸载 {{.Label}}？" hx-post="/action?label={{urlquery .Label}}&path={{urlquery .PlistPath}}&op=unload"
+              hx-target="#{{.HTMLID}}" hx-swap="outerHTML">Unload</button>
+      {{else if ne .PlistPath ""}}
+      <button class="btn" hx-post="/action?label={{urlquery .Label}}&path={{urlquery .PlistPath}}&op=load"
+              hx-target="#{{.HTMLID}}" hx-swap="outerHTML">Load</button>
+      {{end}}
+    </div>
+  </div>
+  <div class="detail-panel" id="detail-{{.HTMLID}}"></div>
+</div>
+{{end}}
