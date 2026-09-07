@@ -20,11 +20,9 @@ cd frontend && pnpm install && pnpm dev   # Vite :8003，/api 代理到 127.0.0.
 
 ## 配置
 
-.env 是唯一配置来源（参考 `.env.example`，`.env` 已 gitignore），优先级：进程环境变量 > `.env` > 未配置密码时本次运行随机生成并打印。`.env` 从工作目录加载，找不到时回退到可执行文件所在目录。变量：
+.env 是唯一配置来源（参考 `.env.example`，`.env` 已 gitignore），优先级：进程环境变量 > `.env`。`.env` 从工作目录加载，找不到时回退到可执行文件所在目录。变量：
 
 - `LOCALCTL_ADDR`：监听地址（默认 127.0.0.1:8003）
-- `LOCALCTL_PASSWORD`：登录密码（明文，启动时内存中做 bcrypt 哈希，不落盘）
-- `LOCALCTL_SECRET`：token 签名 HMAC 密钥
 - `LOCALCTL_CORS_ORIGIN`：允许的跨域来源（默认不启用；内嵌前端同源无需 CORS，仅外部 API 客户端需要时设置）
 
 `.env` 相对进程工作目录加载。
@@ -32,7 +30,7 @@ cd frontend && pnpm install && pnpm dev   # Vite :8003，/api 代理到 127.0.0.
 ## 目录结构
 
 ```
-cmd/localctl/main.go        # 入口：加载 .env、配置、启动 API server
+cmd/localctl/main.go        # 入口：加载 .env、解析监听地址、启动 server
 internal/launchd/
   launchctl.go              # /bin/launchctl exec 封装（10s 超时）+ print/print-disabled 输出解析
   actions.go                # Service 聚合模型 + Start/Stop/Restart/Enable/Disable/Load/Unload
@@ -45,34 +43,32 @@ frontend/
   embed.go                  # go:embed dist（需先 pnpm build）
 internal/config/config.go   # .env 加载 + ~/.localctl/config.json + 密码校验
 frontend/                   # React 19 + Vite 7 + TypeScript（pnpm）
-  src/api.ts                # fetch 客户端：token 管理、API 封装、401 统一处理
+  src/api.ts                # fetch 客户端：API 封装、错误处理
   src/types.ts              # 与后端 JSON 对齐的类型
   src/hooks/useServices.ts  # 5 秒轮询 hook
   src/components/           # StatusBadge / ServiceCard / DetailPanel
-  src/pages/                # Login / Dashboard
+  src/pages/                # Dashboard
 ```
 
 ## API（全部 JSON，前缀 /api）
 
 | 方法 | 路径 | 说明 |
 |---|---|---|
-| GET | /api/health | 无需认证，健康检查 |
-| POST | /api/auth/login | `{password}` → `{token, expires_at}` |
-| GET | /api/auth/me | 校验 token |
+| GET | /api/health | 健康检查 |
 | GET | /api/services | 服务列表（前端每 5 秒轮询） |
 
 除 /api 外的所有 GET 路径由内嵌前端托管（SPA fallback 到 index.html）。
 | GET | /api/services/{label}?path= | 单服务详情（含 plist 配置 `agent`） |
 | POST | /api/services/{label}/actions | `{op, path?}` → `{service}`，op ∈ start/restart/stop/enable/disable/load/unload |
 
-认证：除 /api/health 外均需 `Authorization: Bearer <token>`；无效返回 401 + `{"error": "..."}`。API 设计对 MCP 等外部客户端友好。
+无认证（仅监听 127.0.0.1，本机使用）；错误统一返回 HTTP 状态码 + `{"error": "..."}`。API 设计对 MCP 等外部客户端友好。
 
 ## 架构与数据流
 
 - 单进程：Go 在 8003 同时服务内嵌前端页面与 /api。前端每 5 秒 fetch `GET /api/services` 拿 JSON 全量刷新；操作按钮 POST actions 后返回刷新后的 service JSON 并立即触发一次刷新；详情懒加载 `GET /api/services/{label}`。
 - 列表来源：**只显示 `~/Library/LaunchAgents` 下有 plist 文件的 agent**（plist 视角，有意排除 `launchctl list` 里的 com.apple.* 噪音）。
 - 单个服务状态：先 `launchctl print gui/$UID/<label>` 拿运行时信息；失败则回退 `launchctl print-disabled` 判断 enabled。
-- 前端 401 统一处理：api.ts 清除 token 并派发 `localctl:unauthorized` 事件，App.tsx 监听后回到登录页。
+- 操作后除返回刷新的 service JSON 外，前端还会立即触发一次列表刷新。
 
 ## launchctl 本机已知行为（重要）
 
@@ -83,8 +79,7 @@ frontend/                   # React 19 + Vite 7 + TypeScript（pnpm）
 
 ## 安全模型
 
-- 仅监听 127.0.0.1；bcrypt 密码 + HMAC 签名 bearer token（7 天），无 CSRF 面（不用 cookie）；页面与 API 同源，默认无 CORS。
-- 密码明文与 secret key 存于 `.env`（已 gitignore），勿在代码或日志中输出其内容；未设 `LOCALCTL_SECRET` 时 token 密钥每次重启随机生成，重启后所有登录态失效。
+- 仅监听 127.0.0.1，无认证模块（本机使用）；页面与 API 同源，默认无 CORS。
 
 ## 约定
 

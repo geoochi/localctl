@@ -2,33 +2,68 @@
 package main
 
 import (
+	"bufio"
 	"flag"
-	"fmt"
 	"log"
 	"os"
+	"path/filepath"
+	"strings"
 
-	"localctl/internal/config"
 	"localctl/internal/server"
 )
+
+// loadDotEnv reads key=value pairs into the process environment (existing env
+// wins). Missing file is not an error.
+func loadDotEnv(path string) {
+	f, err := os.Open(path)
+	if err != nil {
+		return
+	}
+	defer f.Close()
+
+	sc := bufio.NewScanner(f)
+	for sc.Scan() {
+		line := strings.TrimSpace(sc.Text())
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		line = strings.TrimPrefix(line, "export ")
+		key, val, ok := strings.Cut(line, "=")
+		if !ok {
+			continue
+		}
+		key = strings.TrimSpace(key)
+		val = strings.TrimSpace(val)
+		if len(val) >= 2 && (val[0] == '"' && val[len(val)-1] == '"' || val[0] == '\'' && val[len(val)-1] == '\'') {
+			val = val[1 : len(val)-1]
+		}
+		if key == "" {
+			continue
+		}
+		if _, exists := os.LookupEnv(key); !exists {
+			os.Setenv(key, val)
+		}
+	}
+}
 
 func main() {
 	addr := flag.String("addr", "127.0.0.1:8003", "listen address")
 	flag.Parse()
 
-	if err := config.LoadDotEnvAnywhere(); err != nil {
-		log.Fatalf("load .env: %v", err)
+	loadDotEnv(".env")
+	if os.Getenv("LOCALCTL_ADDR") == "" {
+		if exe, err := os.Executable(); err == nil {
+			loadDotEnv(filepath.Join(filepath.Dir(exe), ".env"))
+		}
 	}
 
-	cfg, generatedPassword, err := config.Ensure(*addr)
-	if err != nil {
-		log.Fatalf("load config: %v", err)
-	}
-	if generatedPassword != "" {
-		fmt.Fprintf(os.Stderr, "\n未配置 LOCALCTL_PASSWORD，本次运行的随机密码: %s\n（建议在 .env 中固定密码与 LOCALCTL_SECRET）\n\n", generatedPassword)
+	listenAddr := os.Getenv("LOCALCTL_ADDR")
+	if listenAddr == "" {
+		listenAddr = *addr
 	}
 
-	srv := server.New(cfg)
-	if err := srv.Serve(cfg.ListenAddr); err != nil {
+	srv := server.New()
+	if err := srv.Serve(listenAddr); err != nil {
 		log.Fatalf("server: %v", err)
 	}
 }

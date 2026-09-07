@@ -8,21 +8,17 @@ import (
 	"strings"
 
 	"localctl/frontend"
-	"localctl/internal/config"
 )
 
 // Server is the localctl HTTP server: JSON API + embedded frontend.
+// Listens on localhost only, no authentication.
 type Server struct {
-	cfg        *config.Config
 	corsOrigin string
 }
 
 // New returns a ready Server.
-func New(cfg *config.Config) *Server {
-	return &Server{
-		cfg:        cfg,
-		corsOrigin: os.Getenv("LOCALCTL_CORS_ORIGIN"),
-	}
+func New() *Server {
+	return &Server{corsOrigin: os.Getenv("LOCALCTL_CORS_ORIGIN")}
 }
 
 // cors adds CORS headers only when LOCALCTL_CORS_ORIGIN is explicitly set
@@ -50,12 +46,10 @@ func (s *Server) cors(next http.Handler) http.Handler {
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 
-	mux.HandleFunc("GET /api/health", s.handleHealth)
-	mux.HandleFunc("POST /api/auth/login", s.handleLogin)
-	mux.HandleFunc("GET /api/auth/me", s.requireAuth(s.handleMe))
-	mux.HandleFunc("GET /api/services", s.requireAuth(s.handleServices))
-	mux.HandleFunc("GET /api/services/{label}", s.requireAuth(s.handleServiceDetail))
-	mux.HandleFunc("POST /api/services/{label}/actions", s.requireAuth(s.handleAction))
+	mux.HandleFunc("GET /api/health", handleHealth)
+	mux.HandleFunc("GET /api/services", s.handleServices)
+	mux.HandleFunc("GET /api/services/{label}", s.handleServiceDetail)
+	mux.HandleFunc("POST /api/services/{label}/actions", s.handleAction)
 
 	mux.Handle("/", s.frontendHandler())
 

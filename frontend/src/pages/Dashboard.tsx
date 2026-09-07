@@ -1,6 +1,5 @@
 import { ServiceCard } from '../components/ServiceCard'
 import { useServices } from '../hooks/useServices'
-import { setToken } from '../api'
 
 export function Dashboard() {
   const { services, error, refresh } = useServices(5000)
@@ -11,17 +10,6 @@ export function Dashboard() {
         <h1>localctl — LaunchAgents (gui domain)</h1>
         <div>
           <span className="meta">每 5 秒自动刷新</span>
-          <a
-            className="logout"
-            href="/login"
-            onClick={(e) => {
-              e.preventDefault()
-              setToken(null)
-              location.reload()
-            }}
-          >
-            退出
-          </a>
         </div>
       </header>
       <main>

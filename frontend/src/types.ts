@@ -39,8 +39,3 @@ export interface Service {
   runs?: number
   agent?: Agent
 }
-
-export interface LoginResponse {
-  token: string
-  expires_at: string
-}

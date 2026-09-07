@@ -91,31 +91,9 @@ func writeJSONError(w http.ResponseWriter, status int, msg string) {
 	writeJSON(w, status, map[string]string{"error": msg})
 }
 
-// handleHealth is an unauthenticated health probe.
-func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
+// handleHealth is a health probe.
+func handleHealth(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "time": time.Now().Format(time.RFC3339)})
-}
-
-// handleLogin issues a bearer token for a valid password.
-func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
-	var req struct {
-		Password string `json:"password"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeJSONError(w, http.StatusBadRequest, "请求体必须是 JSON")
-		return
-	}
-	if !s.cfg.CheckPassword(req.Password) {
-		writeJSONError(w, http.StatusUnauthorized, "密码错误")
-		return
-	}
-	token, expires := newToken(s.cfg.SecretKey)
-	writeJSON(w, http.StatusOK, map[string]any{"token": token, "expires_at": expires.Format(time.RFC3339)})
-}
-
-// handleMe validates the current token.
-func (s *Server) handleMe(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
 }
 
 // handleServices returns all services (polled by the frontend every 5s).
