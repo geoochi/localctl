@@ -48,10 +48,16 @@ export function importCronEntry(index: number) {
   return request<{ service: Service }>(`/api/cron/${index}/import`, { method: 'POST' })
 }
 
-export function fetchSource(label: string, path: string) {
-  return request<PlistSource>(
+// /source 返回原始 XML 文本而非 JSON，需要单独处理。
+export async function fetchSource(label: string, path: string): Promise<PlistSource> {
+  const res = await fetch(
     `/api/services/${encodeURIComponent(label)}/source?path=${encodeURIComponent(path)}`,
   )
+  if (!res.ok) {
+    const data = (await res.json().catch(() => ({}))) as { error?: string }
+    throw new ApiError(data.error ?? res.statusText)
+  }
+  return { label, path, content: await res.text() }
 }
 
 export function createPlist(req: CreatePlistRequest) {
