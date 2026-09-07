@@ -1,5 +1,6 @@
 import { CreatePlistForm } from '../components/CreatePlistForm'
 import { CronPanel } from '../components/CronPanel'
+import { ThemeToggle } from '../components/ThemeToggle'
 import { ServiceCard } from '../components/ServiceCard'
 import { useServices } from '../hooks/useServices'
 
@@ -10,8 +11,9 @@ export function Dashboard() {
     <>
       <header>
         <h1>localctl — LaunchAgents (gui domain)</h1>
-        <div>
+        <div className="header-right">
           <span className="meta">每 5 秒自动刷新</span>
+          <ThemeToggle />
         </div>
       </header>
       <main>
