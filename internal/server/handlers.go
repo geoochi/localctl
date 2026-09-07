@@ -1,199 +1,190 @@
 package server
 
 import (
-	"crypto/sha256"
-	"encoding/hex"
-	"fmt"
+	"encoding/json"
 	"log"
 	"net/http"
-	"path/filepath"
 	"sort"
 	"strconv"
-	"strings"
+	"time"
 
 	"localctl/internal/launchd"
 	"localctl/internal/plistinfo"
 )
 
-// isHTMX reports whether the request was issued by htmx.
-func isHTMX(r *http.Request) bool {
-	return r.Header.Get("HX-Request") == "true"
+// Service is the JSON view of one service (list item and detail).
+type Service struct {
+	Label      string            `json:"label"`
+	FileName   string            `json:"file_name,omitempty"`
+	PlistPath  string            `json:"plist_path,omitempty"`
+	Program    string            `json:"program,omitempty"`
+	State      launchd.StateKind `json:"state"`
+	PID        string            `json:"pid,omitempty"`
+	ExitCode   string            `json:"exit_code,omitempty"`
+	Enabled    bool              `json:"enabled"`
+	Loaded     bool              `json:"loaded"`
+	ParseError string            `json:"parse_error,omitempty"`
+	Runs       int               `json:"runs,omitempty"`
+	Agent      *plistinfo.Agent  `json:"agent,omitempty"`
 }
 
-// ServiceRow is the view model for one row (and its detail panel).
-type ServiceRow struct {
-	HTMLID     string
-	Label      string
-	FileName   string
-	PlistPath  string
-	Program    string
-	State      launchd.StateKind
-	StateLabel string
-	PID        string
-	ExitCode   string
-	Enabled    bool
-	Loaded     bool
-	ParseError string
-	Agent      *plistinfo.Agent // nil when plist file is missing
-	Runs       int
+func toService(svc *launchd.Service, agent *plistinfo.Agent) *Service {
+	out := &Service{
+		Label:     svc.Label,
+		PlistPath: svc.PlistPath,
+		Program:   svc.Program,
+		State:     svc.State,
+		Enabled:   svc.Enabled,
+		Loaded:    svc.PID != nil || svc.LastExitCode != nil || svc.Runs > 0,
+		Runs:      svc.Runs,
+		Agent:     agent,
+	}
+	if agent != nil {
+		out.FileName = agent.FileName
+		out.ParseError = agent.ParseError
+		if out.Program == "" && len(agent.ProgramArguments) > 0 {
+			out.Program = agent.ProgramArguments[0]
+		}
+	}
+	if svc.PID != nil {
+		out.PID = strconv.Itoa(*svc.PID)
+	}
+	if svc.LastExitCode != nil {
+		out.ExitCode = strconv.Itoa(*svc.LastExitCode)
+	}
+	if out.State == "" {
+		out.State = launchd.StateIdle
+	}
+	return out
 }
 
-func htmlID(label string) string {
-	sum := sha256.Sum256([]byte(label))
-	return "svc-" + hex.EncodeToString(sum[:8])
-}
-
-// buildRows merges scanned plists with `launchctl list` output so that
-// services loaded from outside ~/Library/LaunchAgents are also shown.
-func buildRows() ([]*ServiceRow, error) {
+// buildServices merges scanned plists with launchctl runtime state.
+func buildServices() ([]*Service, error) {
 	agents, err := plistinfo.ScanAgentsDir()
 	if err != nil {
 		return nil, err
 	}
-	rows := make([]*ServiceRow, 0, len(agents))
-
-	// Services that have a plist file on disk.
+	services := make([]*Service, 0, len(agents))
 	for _, a := range agents {
 		svc, err := launchd.GetService(a.Label, a.Path)
 		if err != nil {
 			log.Printf("inspect %s: %v", a.Label, err)
 			svc = &launchd.Service{Label: a.Label, PlistPath: a.Path, Enabled: true, State: launchd.StateIdle}
 		}
-		rows = append(rows, toRow(svc, a))
+		services = append(services, toService(svc, a))
 	}
-
-	sort.Slice(rows, func(i, j int) bool { return rows[i].Label < rows[j].Label })
-	return rows, nil
+	sort.Slice(services, func(i, j int) bool { return services[i].Label < services[j].Label })
+	return services, nil
 }
 
-func toRow(svc *launchd.Service, agent *plistinfo.Agent) *ServiceRow {
-	row := &ServiceRow{
-		HTMLID:    htmlID(svc.Label),
-		Label:     svc.Label,
-		PlistPath: svc.PlistPath,
-		Program:   svc.Program,
-		State:     svc.State,
-		Enabled:   svc.Enabled,
-		Agent:     agent,
-		Runs:      svc.Runs,
-	}
-	if agent != nil {
-		row.FileName = agent.FileName
-		row.ParseError = agent.ParseError
-		if row.Program == "" && len(agent.ProgramArguments) > 0 {
-			row.Program = agent.ProgramArguments[0]
-		}
-	}
-	row.Loaded = hasRuntimeInfo(svc)
-	if svc.PID != nil {
-		row.PID = strconv.Itoa(*svc.PID)
-	} else {
-		row.PID = "-"
-	}
-	if svc.LastExitCode != nil {
-		row.ExitCode = strconv.Itoa(*svc.LastExitCode)
-	} else {
-		row.ExitCode = "-"
-	}
-	switch svc.State {
-	case launchd.StateRunning:
-		row.StateLabel = "running"
-	case launchd.StateExited:
-		row.StateLabel = "exited"
-	case launchd.StateFailed:
-		row.StateLabel = fmt.Sprintf("exit %s", row.ExitCode)
-	default:
-		row.StateLabel = "not running"
-	}
-	return row
-}
-
-// hasRuntimeInfo reports whether launchctl knows about this service.
-func hasRuntimeInfo(svc *launchd.Service) bool {
-	return svc.Runs > 0 || svc.PID != nil || svc.LastExitCode != nil
-}
-
-func (s *Server) render(w http.ResponseWriter, name string, data any) {
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	if err := s.tmpl.ExecuteTemplate(w, name, data); err != nil {
-		log.Printf("render %s: %v", name, err)
+// writeJSON writes v as JSON with the given status code.
+func writeJSON(w http.ResponseWriter, status int, v any) {
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.WriteHeader(status)
+	if err := json.NewEncoder(w).Encode(v); err != nil {
+		log.Printf("write json: %v", err)
 	}
 }
 
-// handleIndex renders the main page.
-func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
-	rows, err := buildRows()
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+// writeJSONError writes a JSON error response.
+func writeJSONError(w http.ResponseWriter, status int, msg string) {
+	writeJSON(w, status, map[string]string{"error": msg})
+}
+
+// handleHealth is an unauthenticated health probe.
+func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "time": time.Now().Format(time.RFC3339)})
+}
+
+// handleLogin issues a bearer token for a valid password.
+func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Password string `json:"password"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSONError(w, http.StatusBadRequest, "请求体必须是 JSON")
 		return
 	}
-	s.render(w, "index.html", rows)
-}
-
-// handleServicesPartial returns just the list of rows (used for 5s polling).
-func (s *Server) handleServicesPartial(w http.ResponseWriter, r *http.Request) {
-	rows, err := buildRows()
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+	if !s.cfg.CheckPassword(req.Password) {
+		writeJSONError(w, http.StatusUnauthorized, "密码错误")
 		return
 	}
-	s.render(w, "services", rows)
+	token, expires := newToken(s.cfg.SecretKey)
+	writeJSON(w, http.StatusOK, map[string]any{"token": token, "expires_at": expires.Format(time.RFC3339)})
 }
 
-// handleDetailPartial returns the expanded config detail for one service.
-func (s *Server) handleDetailPartial(w http.ResponseWriter, r *http.Request) {
-	label := r.URL.Query().Get("label")
+// handleMe validates the current token.
+func (s *Server) handleMe(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
+}
+
+// handleServices returns all services (polled by the frontend every 5s).
+func (s *Server) handleServices(w http.ResponseWriter, r *http.Request) {
+	services, err := buildServices()
+	if err != nil {
+		writeJSONError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"services": services})
+}
+
+// handleServiceDetail returns one service with full plist config.
+func (s *Server) handleServiceDetail(w http.ResponseWriter, r *http.Request) {
+	label := r.PathValue("label")
 	path := r.URL.Query().Get("path")
 	if label == "" {
-		http.Error(w, "missing label", http.StatusBadRequest)
-		return
-	}
-	if path != "" && !strings.HasPrefix(path, "/") {
-		http.Error(w, "bad path", http.StatusBadRequest)
+		writeJSONError(w, http.StatusBadRequest, "missing label")
 		return
 	}
 
-	row := &ServiceRow{HTMLID: htmlID(label), Label: label}
+	var agent *plistinfo.Agent
 	if path != "" {
-		agent := plistinfo.ParseAgent(path)
-		row.Agent = agent
-		row.FileName = agent.FileName
-		row.ParseError = agent.ParseError
-		row.PlistPath = path
+		agent = plistinfo.ParseAgent(path)
 	}
-	if svc, err := launchd.GetService(label, path); err == nil {
-		row.Program = svc.Program
-		row.Enabled = svc.Enabled
-		row.Loaded = hasRuntimeInfo(svc)
-		row.Runs = svc.Runs
-		row.PID = "-"
-		row.ExitCode = "-"
-		if svc.PID != nil {
-			row.PID = strconv.Itoa(*svc.PID)
+	svc, err := launchd.GetService(label, path)
+	if err != nil {
+		if agent == nil {
+			writeJSONError(w, http.StatusNotFound, err.Error())
+			return
 		}
-		if svc.LastExitCode != nil {
-			row.ExitCode = strconv.Itoa(*svc.LastExitCode)
+		// Unloaded service with a known plist: still return config info.
+		svc = &launchd.Service{Label: label, PlistPath: path, Enabled: true, State: launchd.StateIdle}
+		if disabled, derr := launchd.DisabledMap(); derr == nil {
+			if isDisabled, ok := disabled[label]; ok {
+				svc.Enabled = !isDisabled
+			}
 		}
-	} else {
-		row.Enabled = true
-		row.PID = "-"
-		row.ExitCode = "-"
 	}
-	s.render(w, "service_detail", row)
+	writeJSON(w, http.StatusOK, map[string]any{"service": toService(svc, agent)})
 }
 
-// handleAction performs a management operation and returns the refreshed row.
+var validOps = map[string]bool{
+	"start": true, "restart": true, "stop": true,
+	"enable": true, "disable": true, "load": true, "unload": true,
+}
+
+// handleAction performs a management operation and returns the refreshed service.
 func (s *Server) handleAction(w http.ResponseWriter, r *http.Request) {
-	label := r.URL.Query().Get("label")
-	path := r.URL.Query().Get("path")
-	op := r.URL.Query().Get("op")
-	if label == "" || op == "" {
-		http.Error(w, "missing label or op", http.StatusBadRequest)
+	label := r.PathValue("label")
+	var req struct {
+		Op   string `json:"op"`
+		Path string `json:"path"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSONError(w, http.StatusBadRequest, "请求体必须是 JSON")
+		return
+	}
+	if !validOps[req.Op] {
+		writeJSONError(w, http.StatusBadRequest, "未知操作: "+req.Op)
+		return
+	}
+	if (req.Op == "load") != (req.Path != "") {
+		writeJSONError(w, http.StatusBadRequest, "load 需要 path，其他操作不需要")
 		return
 	}
 
 	var err error
-	switch op {
+	switch req.Op {
 	case "start":
 		err = launchd.Start(label)
 	case "restart":
@@ -205,64 +196,23 @@ func (s *Server) handleAction(w http.ResponseWriter, r *http.Request) {
 	case "disable":
 		err = launchd.Disable(label)
 	case "load":
-		if path == "" {
-			http.Error(w, "load requires path", http.StatusBadRequest)
-			return
-		}
-		err = launchd.Load(path, label)
+		err = launchd.Load(req.Path, label)
 	case "unload":
 		err = launchd.Unload(label)
-	default:
-		http.Error(w, "unknown op: "+op, http.StatusBadRequest)
-		return
 	}
-
 	if err != nil {
-		// Return the error inline in the row's action area.
-		s.render(w, "service_row", &ServiceRow{
-			HTMLID:     htmlID(label),
-			Label:      label,
-			FileName:   filepath.Base(path),
-			PlistPath:  path,
-			ParseError: err.Error(),
-			Enabled:    true,
-		})
+		writeJSONError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 
-	svc, gerr := launchd.GetService(label, path)
-	if gerr != nil {
-		http.Error(w, gerr.Error(), http.StatusInternalServerError)
-		return
-	}
 	var agent *plistinfo.Agent
-	if path != "" {
-		agent = plistinfo.ParseAgent(path)
+	if req.Path != "" {
+		agent = plistinfo.ParseAgent(req.Path)
 	}
-	s.render(w, "service_row", toRow(svc, agent))
-}
-
-// handleLoginPage shows the login form.
-func (s *Server) handleLoginPage(w http.ResponseWriter, r *http.Request) {
-	s.render(w, "login.html", nil)
-}
-
-// handleLoginSubmit checks the password and sets the session cookie.
-func (s *Server) handleLoginSubmit(w http.ResponseWriter, r *http.Request) {
-	if err := r.ParseForm(); err != nil {
-		http.Error(w, "bad form", http.StatusBadRequest)
+	svc, err := launchd.GetService(label, req.Path)
+	if err != nil {
+		writeJSONError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	if !s.cfg.CheckPassword(r.PostFormValue("password")) {
-		s.render(w, "login.html", map[string]any{"Error": "密码错误"})
-		return
-	}
-	setSessionCookie(w, s.cfg.SecretKey)
-	http.Redirect(w, r, "/", http.StatusSeeOther)
-}
-
-// handleLogout clears the session.
-func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request) {
-	clearSessionCookie(w)
-	http.Redirect(w, r, "/login", http.StatusSeeOther)
+	writeJSON(w, http.StatusOK, map[string]any{"service": toService(svc, agent)})
 }

@@ -27,10 +27,7 @@ func main() {
 		fmt.Fprintf(os.Stderr, "\n首次启动已生成随机密码: %s\n(保存在 ~/.localctl/config.json)\n\n", generatedPassword)
 	}
 
-	srv, err := server.New(cfg)
-	if err != nil {
-		log.Fatalf("init server: %v", err)
-	}
+	srv := server.New(cfg)
 	if err := srv.Serve(cfg.ListenAddr); err != nil {
 		log.Fatalf("server: %v", err)
 	}

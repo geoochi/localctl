@@ -4,25 +4,26 @@ import (
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/base64"
+	"errors"
 	"net/http"
 	"strconv"
 	"strings"
 	"time"
 )
 
-const sessionCookie = "localctl_session"
+const tokenTTL = 7 * 24 * time.Hour
 
-const sessionTTL = 7 * 24 * time.Hour
+var errInvalidToken = errors.New("invalid or expired token")
 
-// newSessionValue creates "<expires_unix>.<hmac_sig>" for the given secret key.
-func newSessionValue(secret string) string {
-	expires := time.Now().Add(sessionTTL).Unix()
-	payload := strconv.FormatInt(expires, 10)
-	return payload + "." + signPayload(payload, secret)
+// newToken creates "<expires_unix>.<hmac_sig>" signed with the secret key.
+func newToken(secret string) (string, time.Time) {
+	expires := time.Now().Add(tokenTTL)
+	payload := strconv.FormatInt(expires.Unix(), 10)
+	return payload + "." + signPayload(payload, secret), expires
 }
 
-// validSession checks signature and expiry of the session cookie value.
-func validSession(value, secret string) bool {
+// validToken checks signature and expiry of a bearer token.
+func validToken(value, secret string) bool {
 	payload, sig, ok := strings.Cut(value, ".")
 	if !ok {
 		return false
@@ -43,43 +44,23 @@ func signPayload(payload, secret string) string {
 	return base64.RawURLEncoding.EncodeToString(mac.Sum(nil))
 }
 
-// requireAuth wraps a handler, redirecting to /login when there's no valid session.
+// bearerToken extracts the token from the Authorization header.
+func bearerToken(r *http.Request) (string, bool) {
+	auth := r.Header.Get("Authorization")
+	if token, ok := strings.CutPrefix(auth, "Bearer "); ok && token != "" {
+		return strings.TrimSpace(token), true
+	}
+	return "", false
+}
+
+// requireAuth wraps a JSON handler, rejecting requests without a valid bearer token.
 func (s *Server) requireAuth(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		c, err := r.Cookie(sessionCookie)
-		if err != nil || !validSession(c.Value, s.cfg.SecretKey) {
-			if isHTMX(r) {
-				w.Header().Set("HX-Redirect", "/login")
-				w.WriteHeader(http.StatusUnauthorized)
-				return
-			}
-			http.Redirect(w, r, "/login", http.StatusSeeOther)
+		token, ok := bearerToken(r)
+		if !ok || !validToken(token, s.cfg.SecretKey) {
+			writeJSONError(w, http.StatusUnauthorized, "未登录或登录已过期")
 			return
 		}
 		next(w, r)
 	}
-}
-
-// setSessionCookie issues a fresh signed session cookie.
-func setSessionCookie(w http.ResponseWriter, secret string) {
-	http.SetCookie(w, &http.Cookie{
-		Name:     sessionCookie,
-		Value:    newSessionValue(secret),
-		Path:     "/",
-		HttpOnly: true,
-		SameSite: http.SameSiteLaxMode,
-		MaxAge:   int(sessionTTL.Seconds()),
-	})
-}
-
-// clearSessionCookie removes the session cookie.
-func clearSessionCookie(w http.ResponseWriter) {
-	http.SetCookie(w, &http.Cookie{
-		Name:     sessionCookie,
-		Value:    "",
-		Path:     "/",
-		HttpOnly: true,
-		SameSite: http.SameSiteLaxMode,
-		MaxAge:   -1,
-	})
 }

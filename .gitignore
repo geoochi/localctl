@@ -3,9 +3,14 @@
 /localctl-*
 dist/
 
+# Frontend
+frontend/node_modules/
+frontend/dist/
+
 # Local secrets
 .env
 
 # Go
 *.test
 *.out
+frontend/tsconfig.tsbuildinfo
