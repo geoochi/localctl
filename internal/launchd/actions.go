@@ -2,6 +2,7 @@ package launchd
 
 import (
 	"fmt"
+	"time"
 )
 
 // StateKind is a normalized view of a service's runtime state.
@@ -71,6 +72,21 @@ func Load(plistPath, label string) error { return action("bootstrap", Domain(), 
 
 // Bootstrap registers a plist into the user domain (same as Load, label-free).
 func Bootstrap(plistPath string) error { return action("bootstrap", Domain(), plistPath) }
+
+// Reload applies plist changes: bootout the current label, wait for the
+// asynchronous teardown to finish, then bootstrap with retries.
+func Reload(label, plistPath string) error {
+	_ = Unload(label)
+	deadline := time.Now().Add(5 * time.Second)
+	var err error
+	for time.Now().Before(deadline) {
+		if err = Bootstrap(plistPath); err == nil {
+			return nil
+		}
+		time.Sleep(300 * time.Millisecond)
+	}
+	return fmt.Errorf("重新加载失败: %w", err)
+}
 
 // GetService builds the aggregate Service view for one label.
 // plistPath is only used as a fallback when the service is not loaded.

@@ -336,8 +336,8 @@ func (s *Server) handleSourceSave(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if wasLoaded {
-		if err := launchd.Bootstrap(newPath); err != nil {
-			writeJSONError(w, http.StatusInternalServerError, "已保存，但重新加载失败: "+err.Error())
+		if err := launchd.Reload(newLabel, newPath); err != nil {
+			writeJSONError(w, http.StatusInternalServerError, err.Error())
 			return
 		}
 	}
