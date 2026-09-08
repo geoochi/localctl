@@ -40,22 +40,32 @@ export function ServiceCard({ service, onChanged }: { service: Service; onChange
 
   return (
     <div className="svc">
-      <div className="svc-head">
-        <div className="svc-main">
+      <div className="svc-grid">
+        <div className="svc-col">
           <span className="label">{service.label}</span>
-          <StatusBadge service={service} />
-          {service.enabled ? (
-            <span className="badge enabled">enabled</span>
-          ) : (
-            <span className="badge disabled">disabled</span>
-          )}
-          {service.program && <span className="program">{service.program}</span>}
+          <div className="badge-row">
+            <StatusBadge service={service} />
+            {service.enabled ? (
+              <span className="badge enabled">enabled</span>
+            ) : (
+              <span className="badge disabled">disabled</span>
+            )}
+          </div>
           {service.agent?.run_description && (
             <span className="run-desc">⏱ {service.agent.run_description}</span>
           )}
           {service.parse_error && <span className="badge failed">plist 解析失败</span>}
         </div>
-        <div className="svc-actions">
+
+        <div className="svc-col">
+          {service.program ? (
+            <span className="program">{service.program}</span>
+          ) : (
+            <span className="program">（无程序路径）</span>
+          )}
+        </div>
+
+        <div className="svc-col svc-actions">
           <button className="btn detail" onClick={() => setShowDetail((v) => !v)}>
             {showDetail ? '收起' : '详情'}
           </button>

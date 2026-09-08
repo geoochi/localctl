@@ -61,14 +61,16 @@ export function CronPanel({ onChanged }: { onChanged: () => void }) {
       {entries?.length === 0 && <div className="hint">当前 crontab 为空。</div>}
       {entries?.map((entry) => (
         <div className="svc cron-row" key={`${entry.index}-${entry.label}`}>
-          <div className="svc-head">
-            <div className="svc-main">
+          <div className="svc-grid">
+            <div className="svc-col">
               <span className="badge idle">{entry.schedule}</span>
-              <span className="program">{entry.command}</span>
               <CronBadge entry={entry} />
+            </div>
+            <div className="svc-col">
+              <span className="program">{entry.command}</span>
               {entry.reason && <span className="cron-reason">{entry.reason}</span>}
             </div>
-            <div className="svc-actions">
+            <div className="svc-col svc-actions">
               <button
                 className="btn"
                 disabled={!entry.importable || entry.imported || busy !== null}
