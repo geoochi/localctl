@@ -54,7 +54,7 @@ header h1 { font-size: 18px; margin: 0; }
 header .meta { font-size: 12px; color: var(--text-muted); margin-right: 16px; }
 header .header-right { display: flex; align-items: center; gap: 12px; }
 a.logout { font-size: 13px; color: var(--accent); text-decoration: none; }
-main { max-width: 960px; margin: 24px auto; padding: 0 16px; }
+main { margin: 24px auto; padding: 0 16px; }
 .hint { font-size: 12px; color: var(--text-muted); margin-bottom: 12px; }
 
 /* ---- 主题切换 ---- */
@@ -86,7 +86,7 @@ main { max-width: 960px; margin: 24px auto; padding: 0 16px; }
   display: grid;
   grid-template-columns: minmax(280px, 1.2fr) minmax(200px, 1fr) minmax(200px, auto);
   gap: 12px 16px;
-  align-items: start;
+  align-items: center;
 }
 .svc-col {
   display: flex;
