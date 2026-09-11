@@ -166,14 +166,9 @@ func (s *Server) handleAction(w http.ResponseWriter, r *http.Request) {
 		writeJSONError(w, http.StatusBadRequest, "未知操作: "+req.Op)
 		return
 	}
-	needsPath := req.Op == "load" || req.Op == "delete"
-	if needsPath && req.Path == "" {
+	// load/delete 必须带 path；其他操作忽略前端统一携带的 plist path
+	if (req.Op == "load" || req.Op == "delete") && req.Path == "" {
 		writeJSONError(w, http.StatusBadRequest, req.Op+" 需要 path")
-		return
-	}
-	// stop 允许带 path（用于识别 KeepAlive 服务）；其他操作不需要
-	if !needsPath && req.Op != "stop" && req.Path != "" {
-		writeJSONError(w, http.StatusBadRequest, req.Op+" 不需要 path")
 		return
 	}
 
