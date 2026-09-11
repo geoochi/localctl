@@ -56,7 +56,22 @@ func Start(label string) error { return action("kickstart", Domain()+"/"+label) 
 func Restart(label string) error { return action("kickstart", "-k", Domain()+"/"+label) }
 
 // Stop sends SIGTERM to the service's running process.
-func Stop(label string) error { return action("kill", "SIGTERM", Domain()+"/"+label) }
+// Stop boots the service out of the domain (uniform for all services —
+// killing directly fights launchd and KeepAlive jobs just respawn).
+// Waits briefly for the asynchronous bootout to take effect.
+func Stop(label string) error {
+	if err := Unload(label); err != nil {
+		return err
+	}
+	deadline := time.Now().Add(3 * time.Second)
+	for time.Now().Before(deadline) {
+		if _, err := Print(label); err != nil {
+			return nil // no longer registered
+		}
+		time.Sleep(200 * time.Millisecond)
+	}
+	return nil
+}
 
 // Enable removes the service from the disabled set.
 func Enable(label string) error { return action("enable", Domain()+"/"+label) }

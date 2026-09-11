@@ -184,13 +184,7 @@ func (s *Server) handleAction(w http.ResponseWriter, r *http.Request) {
 	case "restart":
 		err = launchd.Restart(label)
 	case "stop":
-		// KeepAlive 服务 kill 后会被 launchd 立即拉起，改为 bootout 卸载
-		if req.Path != "" {
-			if agent := plistinfo.ParseAgent(req.Path); agent != nil && agent.KeepAliveText != "" {
-				err = launchd.Unload(label)
-				break
-			}
-		}
+		// 统一用 bootout：kill 会与 launchd 抢管理权，KeepAlive 服务还会被立即拉起
 		err = launchd.Stop(label)
 	case "enable":
 		err = launchd.Enable(label)
