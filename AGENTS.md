@@ -92,6 +92,7 @@ frontend/                   # React 19 + Vite 7 + TypeScript（pnpm）
 
 - 用户域固定 `gui/$UID`，不支持 system 域（管理 LaunchDaemons 需要 sudo，超出本项目范围）。
 - 管理操作直接生效于 launchctl；Stop 统一用 bootout（不用 kill —— 直接杀进程与 launchd 抢管理权，KeepAlive 服务还会被立即拉起），Stop 后服务未加载，恢复用 Load/Start；Disable 是持久化的（重启后仍禁用）。
-- 危险操作（Stop/Disable/Unload）前端用 `window.confirm` 二次确认（见 ServiceCard.tsx 的 DANGEROUS_OPS），新增操作请保持此约定。
+- 危险操作（卸载/禁用/删除）前端用 `window.confirm` 二次确认（见 ServiceCard.tsx 的 DANGEROUS_OPS），新增操作请保持此约定。
+- 卡片按钮合并约定：Start+Restart 合并为单个「运行/重启」（kickstart -k 对未运行任务即启动）；Stop 与 Unload 同为 bootout，只保留「卸载」。API 仍保留 start/stop op 供外部客户端。
 - 代码注释与 UI 文案混用中英文；前端用户可见文案为中文。
 - 前端类型必须与后端 JSON 对齐：改后端字段时同步 `frontend/src/types.ts`。

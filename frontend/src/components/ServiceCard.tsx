@@ -5,12 +5,11 @@ import { StatusBadge } from './StatusBadge'
 import { DetailPanelLazy } from './DetailPanelLazy'
 import { EditModal } from './EditModal'
 
-const DANGEROUS_OPS = new Set<ActionOp>(['stop', 'disable', 'unload'])
+const DANGEROUS_OPS = new Set<ActionOp>(['disable', 'unload'])
 
 const CONFIRM_MSG: Record<string, string> = {
-  stop: '确定停止',
   disable: '禁用后即使重启也不会运行，确定禁用',
-  unload: '卸载后服务将从 launchd 注销，确定卸载',
+  unload: '卸载后服务将从 launchd 注销（恢复需装载），确定卸载',
 }
 
 export function ServiceCard({ service, onChanged }: { service: Service; onChanged: () => void }) {
@@ -72,23 +71,23 @@ export function ServiceCard({ service, onChanged }: { service: Service; onChange
           {service.plist_path && (
             <button className="btn detail" onClick={() => setEditing(true)}>编辑</button>
           )}
-          <button className="btn" disabled={busy} onClick={() => doAction('start')}>Start</button>
-          <button className="btn" disabled={busy} onClick={() => doAction('restart')}>Restart</button>
-          <button className="btn warn" disabled={busy} onClick={() => doAction('stop')}>Stop</button>
-          {service.enabled ? (
-            <button className="btn warn" disabled={busy} onClick={() => doAction('disable')}>Disable</button>
-          ) : (
-            <button className="btn" disabled={busy} onClick={() => doAction('enable')}>Enable</button>
+          {/* kickstart -k：没跑就启动，跑着就重启 */}
+          <button className="btn" disabled={busy} onClick={() => doAction('restart')}>
+            {service.state === 'running' ? '重启' : '运行'}
+          </button>
+          {service.loaded && (
+            <button className="btn warn" disabled={busy} onClick={() => doAction('unload')}>卸载</button>
           )}
-          {service.loaded ? (
-            <button className="btn warn" disabled={busy} onClick={() => doAction('unload')}>Unload</button>
+          {!service.loaded && service.plist_path && (
+            <button className="btn" disabled={busy} onClick={() => doAction('load')}>装载</button>
+          )}
+          {service.enabled ? (
+            <button className="btn warn" disabled={busy} onClick={() => doAction('disable')}>禁用</button>
           ) : (
-            service.plist_path && (
-              <button className="btn" disabled={busy} onClick={() => doAction('load')}>Load</button>
-            )
+            <button className="btn" disabled={busy} onClick={() => doAction('enable')}>启用</button>
           )}
           {service.plist_path && (
-            <button className="btn danger" disabled={busy} onClick={() => doAction('delete')}>Delete</button>
+            <button className="btn danger" disabled={busy} onClick={() => doAction('delete')}>删除</button>
           )}
         </div>
       </div>
