@@ -171,7 +171,8 @@ func (s *Server) handleAction(w http.ResponseWriter, r *http.Request) {
 		writeJSONError(w, http.StatusBadRequest, req.Op+" 需要 path")
 		return
 	}
-	if !needsPath && req.Path != "" {
+	// stop 允许带 path（用于识别 KeepAlive 服务）；其他操作不需要
+	if !needsPath && req.Op != "stop" && req.Path != "" {
 		writeJSONError(w, http.StatusBadRequest, req.Op+" 不需要 path")
 		return
 	}
@@ -183,6 +184,13 @@ func (s *Server) handleAction(w http.ResponseWriter, r *http.Request) {
 	case "restart":
 		err = launchd.Restart(label)
 	case "stop":
+		// KeepAlive 服务 kill 后会被 launchd 立即拉起，改为 bootout 卸载
+		if req.Path != "" {
+			if agent := plistinfo.ParseAgent(req.Path); agent != nil && agent.KeepAliveText != "" {
+				err = launchd.Unload(label)
+				break
+			}
+		}
 		err = launchd.Stop(label)
 	case "enable":
 		err = launchd.Enable(label)
