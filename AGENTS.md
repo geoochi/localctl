@@ -82,6 +82,8 @@ frontend/                   # React 19 + Vite 7 + TypeScript（pnpm）
 1. 本机 macOS 的 `launchctl print` **不支持 `-json`**，输出为旧式文本块（`key = value`，嵌套 `{...}`）。解析逻辑在 `parseBlock`，顶层块的起始行是 `<target> = {`，解析需从下一行开始（`idx := i + 1`）。
 2. `print` 输出中程序参数块叫 `arguments`（不是 program arguments），成员是不带引号的裸行。
 3. 被 disable / 未 bootstrap 的服务 `launchctl print` 报 "Could not find service ... in domain"，属正常回退路径，不是错误。
+5. macOS 27 起 `print` 输出新增 `LWCR` 块，其嵌套块用的是 `"key" => {` 形式；解析器必须对这种形式递归，否则内层 `}` 会提前终止整块解析（曾导致 pid/runs/last exit code 全部丢失、所有服务被误判为未加载）。
+6. enabled 与是否加载无关：`print` 成功不代表启用，必须始终以 `print-disabled` 为准（列表路径复用同一份 disabled map，避免每个服务各起一次 launchctl）。
 4. `launchctl print-disabled gui/$UID` 输出 `"label" => disabled|enabled` 行格式。
 
 ## 安全模型

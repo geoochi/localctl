@@ -69,10 +69,18 @@ func parseBlock(lines []string, idx *int, depth int) map[string]any {
 			continue // bare quoted block member (e.g. inside program arguments)
 		}
 
-		// "key" => value  (maps like disabled services / environment)
+		// "key" => value  (maps like disabled services / environment / LWCR)
 		if key, val, ok := strings.Cut(trimmed, "=>"); ok {
 			k := strings.Trim(strings.TrimSpace(key), "\"")
-			m[k] = strings.Trim(strings.TrimSpace(val), "\"")
+			v := strings.TrimSpace(val)
+			if v == "{" {
+				// nested block opened with "=> {" (e.g. LWCR on macOS 27):
+				// must be consumed recursively, otherwise its closing brace
+				// terminates the parent block early.
+				m[k] = parseBlock(lines, idx, depth+1)
+				continue
+			}
+			m[k] = strings.Trim(v, "\"")
 			continue
 		}
 

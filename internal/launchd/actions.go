@@ -23,6 +23,7 @@ type Service struct {
 	LastExitCode *int      `json:"last_exit_code"`
 	Runs         int       `json:"runs"`
 	Enabled      bool      `json:"enabled"`
+	Registered   bool      `json:"registered"` // present in the launchd domain
 	PlistPath    string    `json:"plist_path"`
 	Program      string    `json:"program"`
 }
@@ -104,16 +105,30 @@ func Reload(label, plistPath string) error {
 }
 
 // GetService builds the aggregate Service view for one label.
-// plistPath is only used as a fallback when the service is not loaded.
+// plistPath is only used as a fallback when the service is not registered.
 func GetService(label, plistPath string) (*Service, error) {
+	disabled, derr := DisabledMap()
+	if derr != nil {
+		disabled = map[string]bool{}
+	}
+	return getService(label, plistPath, disabled, derr)
+}
+
+// GetServiceWithDisabled reuses an already-fetched disabled map (list paths
+// avoid one launchctl print-disabled call per service).
+func GetServiceWithDisabled(label, plistPath string, disabled map[string]bool) (*Service, error) {
+	return getService(label, plistPath, disabled, nil)
+}
+
+func getService(label, plistPath string, disabled map[string]bool, disabledErr error) (*Service, error) {
 	svc := &Service{Label: label, PlistPath: plistPath, State: StateIdle, Enabled: true}
 
 	if info, err := Print(label); err == nil {
+		svc.Registered = true
 		svc.PID = info.PID
 		svc.LastExitCode = info.LastExitCode
 		svc.Runs = info.Runs
 		svc.State = normalizeState(info.State, info.PID, info.LastExitCode)
-		svc.Enabled = true
 		if svc.PlistPath == "" {
 			svc.PlistPath = info.PlistPath
 		}
@@ -122,12 +137,13 @@ func GetService(label, plistPath string) (*Service, error) {
 		} else if len(info.ProgramArguments) > 0 {
 			svc.Program = info.ProgramArguments[0]
 		}
-	} else if disabled, derr := DisabledMap(); derr == nil {
-		if isDisabled, ok := disabled[label]; ok {
-			svc.Enabled = !isDisabled
-		}
-	} else {
+	} else if disabledErr != nil {
 		return nil, fmt.Errorf("inspect service %s: %w", label, err)
+	}
+
+	// Enabled 是独立于是否加载的持久化状态，始终以 print-disabled 为准
+	if isDisabled, ok := disabled[label]; ok {
+		svc.Enabled = !isDisabled
 	}
 	return svc, nil
 }

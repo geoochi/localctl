@@ -44,7 +44,7 @@ func toService(svc *launchd.Service, agent *plistinfo.Agent) *Service {
 		Program:   svc.Program,
 		State:     svc.State,
 		Enabled:   svc.Enabled,
-		Loaded:    svc.PID != nil || svc.LastExitCode != nil || svc.Runs > 0,
+		Loaded:    svc.Registered,
 		Runs:      svc.Runs,
 		Agent:     agent,
 	}
@@ -73,9 +73,10 @@ func buildServices() ([]*Service, error) {
 	if err != nil {
 		return nil, err
 	}
+	disabled, _ := launchd.DisabledMap() // 整个列表只查一次
 	services := make([]*Service, 0, len(agents))
 	for _, a := range agents {
-		svc, err := launchd.GetService(a.Label, a.Path)
+		svc, err := launchd.GetServiceWithDisabled(a.Label, a.Path, disabled)
 		if err != nil {
 			log.Printf("inspect %s: %v", a.Label, err)
 			svc = &launchd.Service{Label: a.Label, PlistPath: a.Path, Enabled: true, State: launchd.StateIdle}
