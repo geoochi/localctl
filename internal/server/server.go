@@ -53,6 +53,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/services/{label}/source", s.handleSourceSave)
 	mux.HandleFunc("POST /api/services/{label}/actions", s.handleAction)
 	mux.HandleFunc("POST /api/plist", s.handleCreatePlist)
+	mux.HandleFunc("POST /api/backup/sync", s.handleBackupSync)
 	mux.HandleFunc("GET /api/cron", s.handleCron)
 	mux.HandleFunc("POST /api/cron/{index}/import", s.handleCronImport)
 

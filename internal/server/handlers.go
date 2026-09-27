@@ -16,6 +16,7 @@ import (
 
 	"howett.net/plist"
 
+	"localctl/internal/backup"
 	"localctl/internal/cron"
 	"localctl/internal/launchd"
 	"localctl/internal/plistinfo"
@@ -407,7 +408,9 @@ func (s *Server) handleCreatePlist(w http.ResponseWriter, r *http.Request) {
 		}
 		weekdays := req.Weekdays
 		if len(weekdays) == 0 {
-			weekdays = []int{-1} // no Weekday key → every day
+			// 每天：单个 dict，不写 Weekday 键
+			dict["StartCalendarInterval"] = map[string]int{"Hour": *req.Hour, "Minute": *req.Minute}
+			break
 		}
 		var cals []map[string]int
 		for _, wd := range weekdays {
@@ -418,11 +421,7 @@ func (s *Server) handleCreatePlist(w http.ResponseWriter, r *http.Request) {
 			if wd == 7 {
 				wd = 0
 			}
-			cal := map[string]int{"Hour": *req.Hour, "Minute": *req.Minute}
-			if wd >= 0 {
-				cal["Weekday"] = wd
-			}
-			cals = append(cals, cal)
+			cals = append(cals, map[string]int{"Hour": *req.Hour, "Minute": *req.Minute, "Weekday": wd})
 		}
 		if len(cals) == 1 {
 			dict["StartCalendarInterval"] = cals[0]
@@ -480,6 +479,16 @@ func (s *Server) handleCreatePlist(w http.ResponseWriter, r *http.Request) {
 func launchAgentsDirName() string {
 	home, _ := os.UserHomeDir()
 	return filepath.Join(home, "Library", "LaunchAgents")
+}
+
+// handleBackupSync runs one backup cycle (copy plists, commit, push).
+func (s *Server) handleBackupSync(w http.ResponseWriter, r *http.Request) {
+	res, err := backup.Sync()
+	if err != nil {
+		writeJSONError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"result": res})
 }
 
 // handleCron lists the user's crontab entries with import feasibility.

@@ -4,11 +4,13 @@ package main
 import (
 	"bufio"
 	"flag"
+	"fmt"
 	"log"
 	"os"
 	"path/filepath"
 	"strings"
 
+	"localctl/internal/backup"
 	"localctl/internal/server"
 )
 
@@ -48,6 +50,7 @@ func loadDotEnv(path string) {
 
 func main() {
 	addr := flag.String("addr", "127.0.0.1:8003", "listen address")
+	backupSync := flag.Bool("backup-sync", false, "sync plists to the backup git repo and exit")
 	flag.Parse()
 
 	loadDotEnv(".env")
@@ -60,6 +63,24 @@ func main() {
 	listenAddr := os.Getenv("LOCALCTL_ADDR")
 	if listenAddr == "" {
 		listenAddr = *addr
+	}
+
+	// 一次性备份模式：供定时任务调用，同步完成后退出
+	if *backupSync {
+		res, err := backup.Sync()
+		if err != nil {
+			log.Fatalf("backup sync: %v", err)
+		}
+		fmt.Printf("备份完成：拷贝 %d 个 plist", res.Copied)
+		if res.Commit != "" {
+			fmt.Printf("，提交 %s", res.Commit)
+		}
+		if res.Pushed {
+			fmt.Print("，已推送远端\n")
+		} else {
+			fmt.Printf("\n%s\n", res.Message)
+		}
+		return
 	}
 
 	srv := server.New()

@@ -24,6 +24,9 @@ cd frontend && pnpm install && pnpm dev   # Vite :8003，/api 代理到 127.0.0.
 
 - `LOCALCTL_ADDR`：监听地址（默认 127.0.0.1:8003）
 - `LOCALCTL_CORS_ORIGIN`：允许的跨域来源（默认不启用；内嵌前端同源无需 CORS，仅外部 API 客户端需要时设置）
+- `LOCALCTL_BACKUP_DIR`：plist 备份的 git 工作仓库路径（默认 `~/localctl-plist`，支持 `~`）
+- `LOCALCTL_BACKUP_REMOTE`：备份推送远端（留空则只本地提交，例如私有 bare 仓库）
+- `LOCALCTL_SSH_AUTH_SOCK`：备份 push 使用的 ssh-agent 套接字；**launchd 继承的 `SSH_AUTH_SOCK` 常常不含密钥甚至失效**，若用 gpg-agent 需显式指到 `~/.gnupg/S.gpg-agent.ssh`
 
 `.env` 相对进程工作目录加载。
 
@@ -63,6 +66,7 @@ frontend/                   # React 19 + Vite 7 + TypeScript（pnpm）
 | POST | /api/services/{label}/source?path= | 保存 plist 源文件：`{content}`，校验格式后写入，若服务已加载则自动重载 |
 | POST | /api/services/{label}/actions | `{op, path?}` → `{service}`，op ∈ start/restart/stop/enable/disable/load/unload/delete |
 | POST | /api/plist | 新建 LaunchAgent：`{label, command(shell), type: runatload/interval/calendar, interval_seconds?/hour?+minute?+weekdays?, keep_alive?, working_dir?/std_out_path?/std_err_path?}` → 201 `{service}` |
+| POST | /api/backup/sync | 备份一次：拷 plist 到备份仓库 → 写 `restore.sh`/`disabled.json` → commit → push → `{result}` |
 | GET | /api/cron | 解析用户 crontab，标注每条是否可导入 launchd |
 | POST | /api/cron/{index}/import | 将一条 cron 条目导入为 LaunchAgent（写 plist → bootstrap → 从 crontab 移除原行） |
 
@@ -76,6 +80,8 @@ frontend/                   # React 19 + Vite 7 + TypeScript（pnpm）
 - 操作后除返回刷新的 service JSON 外，前端还会立即触发一次列表刷新。
 - Delete（op=delete）：bootout 后删除 plist 文件，仅允许 `~/Library/LaunchAgents` 下的路径（后端强校验），前端二次确认。
 - Cron 导入（internal/cron）：数字/区间/步进/逗号列表展开为 StartCalendarInterval；`*/n * * * *` 用 StartInterval n*60 近似（有漂移）；日+星期同时受限不可导入（cron 或语义 vs launchd 且语义）；导入时同步从 crontab 移除原行避免双重执行。
+- 备份（internal/backup）：把 `~/Library/LaunchAgents/*.plist` 同步进 git 工作仓库（`LOCALCTL_BACKUP_DIR`），并生成 `restore.sh`（新 Mac 上逐个 bootstrap + 恢复禁用状态）与 `disabled.json`；随后 commit 并 push 到 `LOCALCTL_BACKUP_REMOTE`。入口有两个：面板「备份到 Git」按钮（`POST /api/backup/sync`）和一次性 CLI `localctl -backup-sync`（供定时任务调用，本机已建 `com.localctl.backup` 每天 10:00 跑）。
+- git 调用注意事项（踩过的坑）：① `exec.CommandContext` 超时只杀 git 本身，ssh 子进程仍握着输出管道导致 `Wait` 永不返回 —— 必须 `Setpgid` 后 `kill(-pid)`；② 必须给 ssh 加 `BatchMode=yes`，否则无 TTY 环境会挂在交互提示上；③ 覆盖 `SSH_AUTH_SOCK` 时要把 os.Environ() 里的旧值剔除再追加（execve 环境重复 key 只有第一个生效）；④ push 失败只影响远端同步，本地 commit 已落地，下次重试即可。
 
 ## launchctl 本机已知行为（重要）
 

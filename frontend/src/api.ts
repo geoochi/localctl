@@ -1,5 +1,12 @@
 import type { CreatePlistRequest, CronEntry, PlistSource, Service } from './types'
 
+export interface BackupResult {
+  copied: number
+  commit?: string
+  pushed: boolean
+  message?: string
+}
+
 export class ApiError extends Error {}
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -72,4 +79,8 @@ export function createPlist(req: CreatePlistRequest) {
     method: 'POST',
     body: JSON.stringify(req),
   })
+}
+
+export function runBackup() {
+  return request<{ result: BackupResult }>('/api/backup/sync', { method: 'POST' })
 }
