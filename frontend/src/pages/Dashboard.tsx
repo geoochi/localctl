@@ -47,7 +47,9 @@ export function Dashboard() {
         {backupMsg && <div className="hint">{backupMsg}</div>}
         {error && <div className="detail-err">加载失败：{error}</div>}
         {!services && !error && <div className="hint">加载中…</div>}
-        {services?.map((s) => <ServiceCard key={s.label} service={s} onChanged={() => void refresh()} />)}
+        {services?.map((s) => (
+          <ServiceCard key={s.plist_path ?? s.label} service={s} onChanged={() => void refresh()} />
+        ))}
         <CronPanel onChanged={() => void refresh()} />
       </main>
     </>

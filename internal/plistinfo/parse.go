@@ -36,6 +36,8 @@ type Agent struct {
 	ProcessType      string      `json:"process_type,omitempty"`
 	// RunDescription is a human-readable summary of how the agent triggers.
 	RunDescription string `json:"run_description,omitempty"`
+	// LabelMissing 表示 plist 里没有 Label 键（占位/空 plist），展示名回退为文件名
+	LabelMissing bool `json:"label_missing,omitempty"`
 	// ParseError is set when the plist file could not be read/parsed.
 	ParseError string `json:"parse_error,omitempty"`
 }
@@ -139,6 +141,13 @@ func ParseAgent(path string) *Agent {
 	}
 	agent.LowPriorityIO = boolean("LowPriorityIO")
 	agent.ProcessType = str("ProcessType")
+
+	// 占位 plist（如 Google Keystone 留下的空 <dict/>）没有 Label 键：
+	// 退回用文件名当展示名，并标记出来；launchd 里也不存在这样的服务。
+	if agent.Label == "" {
+		agent.Label = strings.TrimSuffix(agent.FileName, ".plist")
+		agent.LabelMissing = true
+	}
 	agent.RunDescription = describeRun(agent)
 	return agent
 }

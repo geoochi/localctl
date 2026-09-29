@@ -53,6 +53,11 @@ export function ServiceCard({ service, onChanged }: { service: Service; onChange
           {service.agent?.run_description && (
             <span className="run-desc">⏱ {service.agent.run_description}</span>
           )}
+          {service.agent?.label_missing && (
+            <span className="badge disabled" title="plist 内没有 Label 键（多为占位/空文件），无法注册到 launchd">
+              plist 为空
+            </span>
+          )}
           {service.parse_error && <span className="badge failed">plist 解析失败</span>}
         </div>
 

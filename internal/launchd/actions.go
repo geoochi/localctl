@@ -123,6 +123,12 @@ func GetServiceWithDisabled(label, plistPath string, disabled map[string]bool) (
 func getService(label, plistPath string, disabled map[string]bool, disabledErr error) (*Service, error) {
 	svc := &Service{Label: label, PlistPath: plistPath, State: StateIdle, Enabled: true}
 
+	// 空 label 绝不能拿去 print：`launchctl print gui/501/` 会导出整个 domain
+	// （上千行），解析结果全是垃圾，还会被误判成“已加载”。
+	if label == "" {
+		return svc, nil
+	}
+
 	if info, err := Print(label); err == nil {
 		svc.Registered = true
 		svc.PID = info.PID

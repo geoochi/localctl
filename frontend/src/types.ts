@@ -23,6 +23,7 @@ export interface Agent {
   low_priority_io?: boolean
   process_type?: string
   run_description?: string
+  label_missing?: boolean
   parse_error?: string
 }
 
